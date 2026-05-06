@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useApp } from '@/app/context/AppContext';
+import type { Mood } from '@/lib/i18n';
 
 interface MoodSelectorProps {
   selectedMood: string | null;
@@ -10,7 +11,7 @@ interface MoodSelectorProps {
 
 export default function MoodSelector({ selectedMood, onSelect }: MoodSelectorProps) {
   const { t, tc, isDark } = useApp();
-  const moods = t.app.moods;
+  const moods: Mood[] = t.app.moods;
 
   return (
     <div className="mb-5">
@@ -18,7 +19,7 @@ export default function MoodSelector({ selectedMood, onSelect }: MoodSelectorPro
         {t.app.moodLabel}
       </p>
       <div className="grid grid-cols-3 gap-2">
-        {moods.map((mood, i) => {
+        {moods.map((mood: Mood, i: number) => {
           const isSelected = selectedMood === mood.id;
           return (
             <motion.button
@@ -43,7 +44,6 @@ export default function MoodSelector({ selectedMood, onSelect }: MoodSelectorPro
                 }
               `}
             >
-              {/* Indicador activo */}
               {isSelected && (
                 <motion.div
                   layoutId="mood-active"
@@ -62,7 +62,6 @@ export default function MoodSelector({ selectedMood, onSelect }: MoodSelectorPro
                 {mood.label}
               </span>
 
-              {/* Check si está seleccionado */}
               {isSelected && (
                 <motion.div
                   initial={{ scale: 0 }}

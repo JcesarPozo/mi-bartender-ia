@@ -1,6 +1,90 @@
 export type Locale = 'es' | 'en';
 
-export const translations = {
+// ── Tipos explícitos ──────────────────────────────────────────────────────────
+
+export interface Mood {
+  id: string;
+  emoji: string;
+  label: string;
+  prompt: string;
+}
+
+export interface AppTranslations {
+  title: string;
+  tagline: string;
+  inputLabel: string;
+  inputPlaceholder: string;
+  saveToCatalog: string;
+  mixing: string;
+  askBartender: string;
+  recommendation: string;
+  generatingImage: string;
+  searchingImage: string;
+  catalog: string;
+  cocktailsSaved: (n: number) => string;
+  noCocktails: string;
+  noCocktailsHint: string;
+  viewRecipe: string;
+  visible: string;
+  delete: string;
+  deleting: string;
+  signOut: string;
+  confirmDelete: (name: string) => string;
+  deleteError: string;
+  loading: string;
+  exportPdf: string;
+  exportingPdf: string;
+  changeImage: string;
+  regeneratingImage: string;
+  switchToEnglish: string;
+  switchToDark: string;
+  switchToLight: string;
+  moodLabel: string;
+  shareCard: string;
+  rateThis: string;
+  filterAll: string;
+  filterBy: string;
+  noResults: string;
+  starRated: (n: number) => string;
+  moods: Mood[];
+}
+
+export interface AuthTranslations {
+  signIn: string;
+  createAccount: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  emailPlaceholder: string;
+  signingIn: string;
+  creatingAccount: string;
+  enterBar: string;
+  createMyAccount: string;
+  noAccount: string;
+  signUpFree: string;
+  haveAccount: string;
+  signInLink: string;
+  tagline: string;
+  accountCreated: string;
+  errors: {
+    invalidCredentials: string;
+    emailNotConfirmed: string;
+    alreadyRegistered: string;
+    weakPassword: string;
+    invalidEmail: string;
+    passwordMismatch: string;
+    passwordTooShort: string;
+  };
+}
+
+export interface Translations {
+  auth: AuthTranslations;
+  app: AppTranslations;
+}
+
+// ── Traducciones ──────────────────────────────────────────────────────────────
+
+export const translations: Record<Locale, Translations> = {
   es: {
     auth: {
       signIn: 'Iniciar sesión',
@@ -68,14 +152,13 @@ export const translations = {
       filterBy: 'Filtrar por etiqueta',
       noResults: 'No hay cócteles con esta etiqueta.',
       starRated: (n: number) => `${n} estrella${n !== 1 ? 's' : ''}`,
-      // Moods
       moods: [
-        { id: 'romantic',     emoji: '💑', label: 'Romántico',    prompt: 'Quiero un cóctel romántico y sofisticado para una cena especial en pareja' },
-        { id: 'party',        emoji: '🎉', label: 'Fiesta',       prompt: 'Quiero un cóctel divertido y festivo para una fiesta con amigos, algo colorido y con mucho sabor' },
-        { id: 'chill',        emoji: '🌅', label: 'Relajado',     prompt: 'Quiero un cóctel relajante y suave para una tarde tranquila' },
-        { id: 'noalcohol',    emoji: '🌿', label: 'Sin alcohol',  prompt: 'Quiero un cóctel sin alcohol, refrescante y delicioso (mocktail)' },
-        { id: 'tropical',     emoji: '🌴', label: 'Tropical',     prompt: 'Quiero un cóctel tropical, exótico y refrescante con sabores frutales' },
-        { id: 'classic',      emoji: '🎩', label: 'Clásico',      prompt: 'Quiero un cóctel clásico y elegante, de los que se han servido en los mejores bares del mundo' },
+        { id: 'romantic',  emoji: '💑', label: 'Romántico',   prompt: 'Quiero un cóctel romántico y sofisticado para una cena especial en pareja' },
+        { id: 'party',     emoji: '🎉', label: 'Fiesta',      prompt: 'Quiero un cóctel divertido y festivo para una fiesta con amigos, algo colorido y con mucho sabor' },
+        { id: 'chill',     emoji: '🌅', label: 'Relajado',    prompt: 'Quiero un cóctel relajante y suave para una tarde tranquila' },
+        { id: 'noalcohol', emoji: '🌿', label: 'Sin alcohol', prompt: 'Quiero un cóctel sin alcohol, refrescante y delicioso (mocktail)' },
+        { id: 'tropical',  emoji: '🌴', label: 'Tropical',    prompt: 'Quiero un cóctel tropical, exótico y refrescante con sabores frutales' },
+        { id: 'classic',   emoji: '🎩', label: 'Clásico',     prompt: 'Quiero un cóctel clásico y elegante, de los que se han servido en los mejores bares del mundo' },
       ],
     },
   },
@@ -147,18 +230,16 @@ export const translations = {
       noResults: 'No cocktails with this tag.',
       starRated: (n: number) => `${n} star${n !== 1 ? 's' : ''}`,
       moods: [
-        { id: 'romantic',     emoji: '💑', label: 'Romantic',      prompt: 'I want a romantic and sophisticated cocktail for a special dinner for two' },
-        { id: 'party',        emoji: '🎉', label: 'Party',         prompt: 'I want a fun and festive cocktail for a party with friends, something colorful and flavorful' },
-        { id: 'chill',        emoji: '🌅', label: 'Chill',         prompt: 'I want a relaxing and smooth cocktail for a quiet afternoon' },
-        { id: 'noalcohol',    emoji: '🌿', label: 'No alcohol',    prompt: 'I want a non-alcoholic cocktail, refreshing and delicious (mocktail)' },
-        { id: 'tropical',     emoji: '🌴', label: 'Tropical',      prompt: 'I want a tropical, exotic and refreshing cocktail with fruity flavors' },
-        { id: 'classic',      emoji: '🎩', label: 'Classic',       prompt: 'I want a classic and elegant cocktail, the kind served in the world\'s finest bars' },
+        { id: 'romantic',  emoji: '💑', label: 'Romantic',    prompt: 'I want a romantic and sophisticated cocktail for a special dinner for two' },
+        { id: 'party',     emoji: '🎉', label: 'Party',       prompt: 'I want a fun and festive cocktail for a party with friends, something colorful and flavorful' },
+        { id: 'chill',     emoji: '🌅', label: 'Chill',       prompt: 'I want a relaxing and smooth cocktail for a quiet afternoon' },
+        { id: 'noalcohol', emoji: '🌿', label: 'No alcohol',  prompt: 'I want a non-alcoholic cocktail, refreshing and delicious (mocktail)' },
+        { id: 'tropical',  emoji: '🌴', label: 'Tropical',    prompt: 'I want a tropical, exotic and refreshing cocktail with fruity flavors' },
+        { id: 'classic',   emoji: '🎩', label: 'Classic',     prompt: "I want a classic and elegant cocktail, the kind served in the world's finest bars" },
       ],
     },
   },
-} as any;
-
-export type Translations = any;
+};
 
 export function detectLocale(): Locale {
   if (typeof window === 'undefined') return 'es';
