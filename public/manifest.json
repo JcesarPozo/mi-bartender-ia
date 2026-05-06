@@ -1,0 +1,27 @@
+{
+  "name": "Mi Bartender IA",
+  "short_name": "Bartender IA",
+  "description": "Tu mixólogo personal con inteligencia artificial",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000308",
+  "theme_color": "#f5c842",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo-borrachos.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-borrachos.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "lifestyle", "entertainment"],
+  "lang": "es",
+  "dir": "ltr"
+}
