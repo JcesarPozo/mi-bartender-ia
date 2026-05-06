@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import AuthModal from './components/AuthModal';
@@ -25,13 +25,27 @@ interface Cocktail {
   tags: string[];
 }
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden:  { opacity: 0, y: 24 },
-  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.45, ease: 'easeOut' } }),
-  exit:    { opacity: 0, y: -12, transition: { duration: 0.25 } },
+  visible: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.08, duration: 0.45, ease: 'easeOut' as const },
+  }),
+  exit: { opacity: 0, y: -12, transition: { duration: 0.25 } },
 };
-const fadeIn  = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.4 } }, exit: { opacity: 0, transition: { duration: 0.2 } } };
-const scaleIn = { hidden: { opacity: 0, scale: 0.88 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] as any } }, exit: { opacity: 0, scale: 0.92, transition: { duration: 0.2 } } };
+
+const fadeIn: Variants = {
+  hidden:  { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } },
+  exit:    { opacity: 0, transition: { duration: 0.2 } },
+};
+
+const scaleIn: Variants = {
+  hidden:  { opacity: 0, scale: 0.88 },
+  visible: { opacity: 1, scale: 1,   transition: { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] as unknown as 'easeOut' } },
+  exit:    { opacity: 0, scale: 0.92, transition: { duration: 0.2 } },
+};
 
 export default function Home() {
   const { t, tc, isDark, toggleTheme, locale, setLocale } = useApp();
@@ -394,7 +408,6 @@ export default function Home() {
                       className={`rounded-xl shadow-lg max-h-72 object-cover border-2 ${tc.borderImg}`}
                       onError={() => setCocktailImage('/default-cocktail.jpg')} />
 
-                    {/* Botones bajo la imagen */}
                     <div className="flex items-center gap-2 flex-wrap justify-center">
                       <motion.button onClick={handleRegenerateImage} disabled={imageLoading}
                         whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
@@ -402,7 +415,6 @@ export default function Home() {
                         <span>🎲</span><span>{app.changeImage}</span>
                       </motion.button>
 
-                      {/* Compartir — siempre visible cuando hay imagen */}
                       <motion.button
                         whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                         onClick={() => {
@@ -432,10 +444,8 @@ export default function Home() {
                 <p className={`text-xs mt-1 ${tc.textSub}`}>{app.cocktailsSaved(cocktailsList.length)}</p>
               </div>
 
-              {/* Filtro por tags */}
               <TagFilter availableTags={allAvailableTags} activeFilter={activeFilter} onFilter={setActiveFilter} />
 
-              {/* Lista vacía */}
               {cocktailsList.length === 0 ? (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
                   className="flex-1 flex flex-col items-center justify-center text-center py-8">
@@ -461,7 +471,6 @@ export default function Home() {
                         <motion.div key={item.id} custom={i} variants={fadeUp} initial="hidden" animate="visible" exit="exit" layout
                           className={`rounded-xl border transition-all duration-200 overflow-hidden ${tc.catalogCard(isActive)}`}>
 
-                          {/* Thumbnail + info */}
                           <div className="flex items-center gap-3 p-3">
                             <div className={`w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border ${tc.thumbBg} ${tc.borderThumb}`}>
                               {item.image_path
@@ -471,7 +480,6 @@ export default function Home() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className={`font-bold text-sm truncate ${tc.catalogCardTitle(isActive)}`}>{item.name}</p>
-                              {/* Estrellas */}
                               <div className="mt-0.5 flex items-center gap-2">
                                 <StarRating rating={item.rating || 0} cocktailId={item.id} onRate={handleRate} size="sm" />
                                 <span className={`text-[10px] ${tc.textFaint}`}>
@@ -481,14 +489,12 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Snippet receta */}
                           <div className="px-3 pb-1">
                             <p className={`text-xs leading-relaxed line-clamp-2 ${tc.textSub}`}>
                               {item.recipe?.replace(/[#*`]/g, '').substring(0, 80)}...
                             </p>
                           </div>
 
-                          {/* Tags */}
                           {(item.tags || []).length > 0 && (
                             <div className="flex flex-wrap gap-1 px-3 pb-2">
                               {(item.tags || []).slice(0, 3).map(tagId => {
@@ -509,14 +515,12 @@ export default function Home() {
                             </div>
                           )}
 
-                          {/* Botones acción */}
                           <div className={`flex border-t ${tc.borderDivider}`}>
                             <button onClick={() => handleViewCocktail(item)} disabled={isDeleting}
                               className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${tc.btnView(isActive)}`}>
                               {isActive ? app.visible : `👁 ${app.viewRecipe}`}
                             </button>
                             <div className={`w-px ${tc.borderDivider}`} />
-                            {/* Botón compartir */}
                             <button onClick={() => setShareTarget({ ...item, image_path: imageCache.current.get(item.id) || item.image_path })}
                               title={app.shareCard}
                               className={`px-3 py-2 text-xs font-semibold transition-all ${tc.btnView(false)}`}>
