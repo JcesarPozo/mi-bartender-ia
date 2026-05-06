@@ -158,7 +158,7 @@ export const translations = {
   },
 } as const;
 
-export type Translations = (typeof translations)['es'];
+export type Translations = Record<string, any>;
 
 export function detectLocale(): Locale {
   if (typeof window === 'undefined') return 'es';
