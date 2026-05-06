@@ -7,13 +7,14 @@ import React from 'react';
 import {
   Document, Page, View, Text, Image, StyleSheet,
 } from '@react-pdf/renderer';
+import type { Style } from '@react-pdf/types';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 export interface CocktailPdfItem {
   id: string;
   name: string;
   recipe: string;
-  imageSrc: string | null; // base64 data URI o URL accesible
+  imageSrc: string | null;
   date: string;
 }
 
@@ -305,7 +306,11 @@ const S = StyleSheet.create({
 });
 
 // ── Componentes de renderizado ────────────────────────────────────────────────
-function Runs({ runs, base }: { runs: Run[]; base: object }) {
+
+// Usamos el tipo inferido del StyleSheet para garantizar compatibilidad total
+type PdfStyle = Style;
+
+function Runs({ runs, base }: { runs: Run[]; base: PdfStyle }) {
   if (!runs.length) return null;
   return (
     <Text style={base}>
