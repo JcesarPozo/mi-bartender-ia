@@ -65,14 +65,3 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-      console.error('Error al eliminar cóctel:', deleteError);
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, message: 'Cóctel eliminado' });
-
-  } catch (error: any) {
-    console.error('Error en DELETE /api/cocktails/[id]:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
