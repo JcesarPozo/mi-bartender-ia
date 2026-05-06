@@ -7,7 +7,9 @@ import React from 'react';
 import {
   Document, Page, View, Text, Image, StyleSheet,
 } from '@react-pdf/renderer';
-import type { Style } from '@react-pdf/types';
+
+// Extraemos el tipo Style del propio StyleSheet — sin importar paquetes externos
+type PdfStyle = ReturnType<typeof StyleSheet.create>[string];
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 export interface CocktailPdfItem {
@@ -45,7 +47,7 @@ function parseInline(raw: string): Run[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(raw)) !== null) {
     if (m.index > last) runs.push({ text: raw.slice(last, m.index) });
-    if (m[1] != null)   runs.push({ text: m[1], bold: true });
+    if (m[1] != null)      runs.push({ text: m[1], bold: true });
     else if (m[2] != null) runs.push({ text: m[2], italic: true });
     last = m.index + m[0].length;
   }
@@ -58,11 +60,10 @@ function parseInline(raw: string): Run[] {
 function parseMarkdown(md: string): Block[] {
   return md.split('\n').reduce<Block[]>((acc, rawLine) => {
     const line = stripEmoji(rawLine);
-    if (!line.trim()) {
-      acc.push({ type: 'blank' }); return acc;
-    }
+    if (!line.trim()) { acc.push({ type: 'blank' }); return acc; }
+
     const h1 = line.match(/^#{1}\s+(.+)$/);
-    if (h1) { acc.push({ type: 'h2', runs: parseInline(h1[1]) }); return acc; }
+    if (h1)  { acc.push({ type: 'h2', runs: parseInline(h1[1]) }); return acc; }
 
     const h23 = line.match(/^#{2,}\s+(.+)$/);
     if (h23) { acc.push({ type: 'h3', runs: parseInline(h23[1]) }); return acc; }
@@ -86,7 +87,6 @@ const C = {
   goldFaint:   'rgba(245,200,66,0.25)',
   goldMuted:   'rgba(245,200,66,0.65)',
   navy:        '#000810',
-  navyMid:     '#000c1f',
   amberDark:   '#6b4f0a',
   amberMid:    '#8b6914',
   bodyText:    '#2a1f00',
@@ -100,215 +100,45 @@ const C = {
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
-  /* Cover */
-  coverPage: {
-    backgroundColor: C.navy,
-    padding: 0,
-  },
-  coverInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 60,
-  },
-  coverTitle: {
-    fontFamily: 'Times-Roman',
-    fontSize: 34,
-    color: C.gold,
-    textAlign: 'center',
-    marginBottom: 10,
-    letterSpacing: 1.5,
-  },
-  coverDivider: {
-    width: 56,
-    height: 1.5,
-    backgroundColor: C.gold,
-    opacity: 0.45,
-    marginVertical: 18,
-  },
-  coverDate: {
-    fontFamily: 'Helvetica',
-    fontSize: 12,
-    color: C.goldMuted,
-    textAlign: 'center',
-    marginBottom: 28,
-  },
-  coverBadge: {
-    borderWidth: 1,
-    borderColor: C.goldFaint,
-    borderRadius: 20,
-    paddingHorizontal: 22,
-    paddingVertical: 9,
-  },
-  coverBadgeText: {
-    fontFamily: 'Helvetica',
-    fontSize: 11,
-    color: C.goldMuted,
-    textAlign: 'center',
-  },
-  coverFooter: {
-    position: 'absolute',
-    bottom: 22,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  coverFooterText: {
-    fontFamily: 'Helvetica',
-    fontSize: 8,
-    color: C.coverFooter,
-  },
+  coverPage:       { backgroundColor: C.navy, padding: 0 },
+  coverInner:      { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60 },
+  coverTitle:      { fontFamily: 'Times-Roman', fontSize: 34, color: C.gold, textAlign: 'center', marginBottom: 10, letterSpacing: 1.5 },
+  coverDivider:    { width: 56, height: 1.5, backgroundColor: C.gold, opacity: 0.45, marginVertical: 18 },
+  coverDate:       { fontFamily: 'Helvetica', fontSize: 12, color: C.goldMuted, textAlign: 'center', marginBottom: 28 },
+  coverBadge:      { borderWidth: 1, borderColor: C.goldFaint, borderRadius: 20, paddingHorizontal: 22, paddingVertical: 9 },
+  coverBadgeText:  { fontFamily: 'Helvetica', fontSize: 11, color: C.goldMuted, textAlign: 'center' },
+  coverFooter:     { position: 'absolute', bottom: 22, left: 0, right: 0, alignItems: 'center' },
+  coverFooterText: { fontFamily: 'Helvetica', fontSize: 8, color: C.coverFooter },
 
-  /* Cocktail page */
-  page: {
-    backgroundColor: C.pageBg,
-    paddingHorizontal: 42,
-    paddingTop: 36,
-    paddingBottom: 48,
-  },
+  page:            { backgroundColor: C.pageBg, paddingHorizontal: 42, paddingTop: 36, paddingBottom: 48 },
 
-  /* Card header */
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  cocktailImg: {
-    width: 128,
-    height: 128,
-    borderRadius: 10,
-    marginRight: 18,
-    backgroundColor: C.warmBg,
-    objectFit: 'cover',
-  },
-  imgPlaceholder: {
-    width: 128,
-    height: 128,
-    borderRadius: 10,
-    marginRight: 18,
-    backgroundColor: C.warmBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imgPlaceholderText: {
-    fontFamily: 'Helvetica',
-    fontSize: 8,
-    color: C.amberMid,
-  },
-  titleBlock: {
-    flex: 1,
-    paddingTop: 4,
-  },
-  cocktailName: {
-    fontFamily: 'Times-Roman',
-    fontSize: 24,
-    color: C.amberDark,
-    lineHeight: 1.25,
-    marginBottom: 7,
-  },
-  cocktailDate: {
-    fontFamily: 'Helvetica',
-    fontSize: 9,
-    color: C.amberMid,
-  },
+  cardHeader:      { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  cocktailImg:     { width: 128, height: 128, borderRadius: 10, marginRight: 18, backgroundColor: C.warmBg, objectFit: 'cover' },
+  imgPlaceholder:  { width: 128, height: 128, borderRadius: 10, marginRight: 18, backgroundColor: C.warmBg, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  imgPlaceholderText: { fontFamily: 'Helvetica', fontSize: 8, color: C.amberMid },
+  titleBlock:      { flex: 1, paddingTop: 4 },
+  cocktailName:    { fontFamily: 'Times-Roman', fontSize: 24, color: C.amberDark, lineHeight: 1.25, marginBottom: 7 },
+  cocktailDate:    { fontFamily: 'Helvetica', fontSize: 9, color: C.amberMid },
 
-  /* Recipe */
-  recipeBody: { flex: 1 },
-  h2: {
-    fontFamily: 'Times-Bold',
-    fontSize: 13,
-    color: C.amberDark,
-    marginTop: 11,
-    marginBottom: 4,
-  },
-  h3: {
-    fontFamily: 'Times-Bold',
-    fontSize: 11,
-    color: C.amberDark,
-    marginTop: 8,
-    marginBottom: 3,
-  },
-  para: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    color: C.bodyText,
-    marginBottom: 3,
-    lineHeight: 1.55,
-  },
-  bulletRow: {
-    flexDirection: 'row',
-    marginBottom: 2.5,
-    paddingLeft: 6,
-  },
-  bulletDot: {
-    fontFamily: 'Helvetica-Bold',
-    fontSize: 11,
-    color: C.gold,
-    width: 13,
-    lineHeight: 1.4,
-  },
-  bulletText: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    color: C.bodyText,
-    flex: 1,
-    lineHeight: 1.55,
-  },
-  numberedRow: {
-    flexDirection: 'row',
-    marginBottom: 2.5,
-    paddingLeft: 2,
-  },
-  numberedN: {
-    fontFamily: 'Helvetica-Bold',
-    fontSize: 10,
-    color: C.gold,
-    width: 18,
-    lineHeight: 1.55,
-  },
-  numberedText: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    color: C.bodyText,
-    flex: 1,
-    lineHeight: 1.55,
-  },
-  bold:   { fontFamily: 'Helvetica-Bold' },
-  italic: { fontFamily: 'Helvetica-Oblique' },
+  recipeBody:      { flex: 1 },
+  h2:              { fontFamily: 'Times-Bold',   fontSize: 13, color: C.amberDark, marginTop: 11, marginBottom: 4 },
+  h3:              { fontFamily: 'Times-Bold',   fontSize: 11, color: C.amberDark, marginTop: 8,  marginBottom: 3 },
+  para:            { fontFamily: 'Helvetica',    fontSize: 10, color: C.bodyText,  marginBottom: 3, lineHeight: 1.55 },
+  bulletRow:       { flexDirection: 'row', marginBottom: 2.5, paddingLeft: 6 },
+  bulletDot:       { fontFamily: 'Helvetica-Bold', fontSize: 11, color: C.gold, width: 13, lineHeight: 1.4 },
+  bulletText:      { fontFamily: 'Helvetica', fontSize: 10, color: C.bodyText, flex: 1, lineHeight: 1.55 },
+  numberedRow:     { flexDirection: 'row', marginBottom: 2.5, paddingLeft: 2 },
+  numberedN:       { fontFamily: 'Helvetica-Bold', fontSize: 10, color: C.gold, width: 18, lineHeight: 1.55 },
+  numberedText:    { fontFamily: 'Helvetica', fontSize: 10, color: C.bodyText, flex: 1, lineHeight: 1.55 },
+  bold:            { fontFamily: 'Helvetica-Bold' },
+  italic:          { fontFamily: 'Helvetica-Oblique' },
 
-  /* Page footer */
-  footer: {
-    position: 'absolute',
-    bottom: 18,
-    left: 42,
-    right: 42,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 0.5,
-    borderTopColor: C.footerLine,
-    paddingTop: 5,
-  },
-  footerLeft: {
-    fontFamily: 'Helvetica',
-    fontSize: 7.5,
-    color: C.mutedGray,
-  },
-  footerRight: {
-    fontFamily: 'Helvetica',
-    fontSize: 7.5,
-    color: C.mutedGray,
-  },
+  footer:          { position: 'absolute', bottom: 18, left: 42, right: 42, flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: C.footerLine, paddingTop: 5 },
+  footerLeft:      { fontFamily: 'Helvetica', fontSize: 7.5, color: C.mutedGray },
+  footerRight:     { fontFamily: 'Helvetica', fontSize: 7.5, color: C.mutedGray },
 });
 
 // ── Componentes de renderizado ────────────────────────────────────────────────
-
-// Usamos el tipo inferido del StyleSheet para garantizar compatibilidad total
-type PdfStyle = Style;
 
 function Runs({ runs, base }: { runs: Run[]; base: PdfStyle }) {
   if (!runs.length) return null;
@@ -328,10 +158,10 @@ function Blocks({ blocks }: { blocks: Block[] }) {
     <>
       {blocks.map((b, i) => {
         if (b.type === 'blank')    return null;
-        if (b.type === 'h2')       return <Runs key={i} runs={b.runs} base={S.h2} />;
-        if (b.type === 'h3')       return <Runs key={i} runs={b.runs} base={S.h3} />;
-        if (b.type === 'para')     return <Runs key={i} runs={b.runs} base={S.para} />;
-        if (b.type === 'bullet')   return (
+        if (b.type === 'h2')      return <Runs key={i} runs={b.runs} base={S.h2} />;
+        if (b.type === 'h3')      return <Runs key={i} runs={b.runs} base={S.h3} />;
+        if (b.type === 'para')    return <Runs key={i} runs={b.runs} base={S.para} />;
+        if (b.type === 'bullet')  return (
           <View key={i} style={S.bulletRow}>
             <Text style={S.bulletDot}>{'\u2022'}</Text>
             <Runs runs={b.runs} base={S.bulletText} />
@@ -384,13 +214,10 @@ export function CatalogDocument({ cocktails, locale, generatedDate, footerBrand 
 
       {/* ── Una página por cóctel ── */}
       {cocktails.map((c) => {
-        const blocks = parseMarkdown(c.recipe);
+        const blocks   = parseMarkdown(c.recipe);
         const safeName = stripEmoji(c.name);
-
         return (
           <Page key={c.id} size="A4" style={S.page}>
-
-            {/* Cabecera: imagen + nombre */}
             <View style={S.cardHeader}>
               {c.imageSrc ? (
                 <Image src={c.imageSrc} style={S.cocktailImg} />
@@ -405,12 +232,10 @@ export function CatalogDocument({ cocktails, locale, generatedDate, footerBrand 
               </View>
             </View>
 
-            {/* Receta */}
             <View style={S.recipeBody}>
               <Blocks blocks={blocks} />
             </View>
 
-            {/* Pie de página */}
             <View style={S.footer} fixed>
               <Text style={S.footerLeft}>{footerBrand}</Text>
               <Text
@@ -418,7 +243,6 @@ export function CatalogDocument({ cocktails, locale, generatedDate, footerBrand 
                 render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
               />
             </View>
-
           </Page>
         );
       })}
