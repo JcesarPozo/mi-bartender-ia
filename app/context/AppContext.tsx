@@ -57,7 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const isDark  = theme === 'dark';
-  const t       = translations[locale];
+  const t: Translations = translations[locale] as Translations;
   const tc      = getThemeClasses(isDark);
 
   // Evitar flash de contenido sin estilos — render invisible hasta que se cargue la preferencia
