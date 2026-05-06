@@ -93,7 +93,8 @@ export async function exportCatalogPdf(
     footerBrand,
   });
 
-  const blob = await pdf(element).toBlob();
+  //const blob = await pdf(element).toBlob();
+  const blob = await pdf(element as any).toBlob();
 
   // ── 5. Descargar ───────────────────────────────────────────────────────────
   downloadBlob(blob, filename);
