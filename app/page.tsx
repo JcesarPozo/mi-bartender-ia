@@ -550,12 +550,12 @@ export default function Home() {
       {/* Footer */}
       <motion.footer initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 0.6 }} className="mt-16 pb-10">
         {/* Separador decorativo */}
-        <div className="flex items-center gap-4 mb-8 px-8">
-          <div className={`w-24 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
+        <div className="flex items-center justify-center gap-4 mb-8">
+          <div className={`w-20 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
           <span className={`text-xs tracking-[0.3em] uppercase font-medium whitespace-nowrap ${isDark ? 'text-[#f5c842]/30' : 'text-[#8B6914]/40'}`}>
             {locale === 'es' ? 'Con sabor a fiesta' : 'Crafted with taste'}
           </span>
-          <div className={`w-24 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
+          <div className={`w-20 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
         </div>
         {/* Contenido footer */}
         <div className="flex flex-col items-center gap-4">
