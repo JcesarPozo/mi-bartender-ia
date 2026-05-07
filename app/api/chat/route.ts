@@ -4,16 +4,6 @@ import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { generateTags } from '@/lib/autoTags';
 
-// Cliente de OpenRouter (sin autenticación de usuario)
-const openrouter = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': 'http://localhost:3000',
-    'X-Title': 'Mi Bartender IA',
-  },
-});
-
 // ----------------------------------------------------------------------
 // Funciones auxiliares de extracción
 // ----------------------------------------------------------------------
@@ -107,6 +97,16 @@ function extractGarnishFromRecipe(text: string): string {
 // ----------------------------------------------------------------------
 export async function POST(req: Request) {
   try {
+    // Validar variables de entorno al inicio
+    if (!process.env.OPENROUTER_API_KEY) {
+      console.error('[chat] Error: OPENROUTER_API_KEY no definida');
+      return NextResponse.json({ error: 'Servidor no configurado correctamente' }, { status: 500 });
+    }
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.error('[chat] Error: variables de Supabase no definidas');
+      return NextResponse.json({ error: 'Servidor no configurado correctamente' }, { status: 500 });
+    }
+
     // 1. Obtener token del header Authorization
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
     // 2. Verificar el token con Supabase y obtener el usuario autenticado
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!, // Usamos service_role para verificar el token
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
@@ -135,11 +135,17 @@ export async function POST(req: Request) {
       }
     );
 
-    const { prompt, shouldSave = true, locale = 'es', moodId = null } = await req.json();
+    // 4. Inicializar OpenRouter DENTRO de la función POST (no en el módulo)
+    const openrouter = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: process.env.OPENROUTER_API_KEY,
+      defaultHeaders: {
+        'HTTP-Referer': 'https://mi-bartender-ia.vercel.app',
+        'X-Title': 'Mi Bartender IA',
+      },
+    });
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      return NextResponse.json({ error: 'Falta la clave de OpenRouter' }, { status: 500 });
-    }
+    const { prompt, shouldSave = true, locale = 'es', moodId = null } = await req.json();
 
     // 4. Llamar a la IA (OpenRouter)
     const isEnglish = locale === 'en';

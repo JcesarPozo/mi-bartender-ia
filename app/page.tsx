@@ -387,7 +387,7 @@ export default function Home() {
                 {response && (
                   <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-8 p-5 rounded-xl ${tc.recipeBox}`}>
                     <h2 className={`text-xl font-bold mb-2 ${tc.textRecommTitle}`}>{app.recommendation}</h2>
-                    <div className={`prose prose-invert ${tc.textRecipe}`}><ReactMarkdown>{response}</ReactMarkdown></div>
+                    <div className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-stone'} ${tc.textRecipe}`}><ReactMarkdown>{response}</ReactMarkdown></div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -549,21 +549,30 @@ export default function Home() {
 
       {/* Footer */}
       <motion.footer initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 0.6 }} className="mt-16 pb-10">
+        {/* Separador decorativo */}
         <div className="flex items-center gap-4 mb-8 px-8">
-          <div className={`flex-1 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/10'}`} />
-          <span className={`text-xs tracking-[0.3em] uppercase font-medium ${isDark ? 'text-[#f5c842]/30' : 'text-[#8B6914]/30'}`}>
+          <div className={`w-24 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
+          <span className={`text-xs tracking-[0.3em] uppercase font-medium whitespace-nowrap ${isDark ? 'text-[#f5c842]/30' : 'text-[#8B6914]/40'}`}>
             {locale === 'es' ? 'Con sabor a fiesta' : 'Crafted with taste'}
           </span>
-          <div className={`flex-1 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/10'}`} />
+          <div className={`w-24 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
         </div>
+        {/* Contenido footer */}
         <div className="flex flex-col items-center gap-4">
-          <div className={`w-40 h-20 rounded-2xl overflow-hidden border shadow-lg ${isDark ? 'border-[#f5c842]/25 shadow-[#f5c842]/10' : 'border-[#8B6914]/20 shadow-[#8B6914]/10'}`}>
-            <img src="/logo-borrachos.jpg" alt="Borrach@s y más" className="w-full h-full object-contain image-render-high-quality" />
+          {/* Logo con menos borde en modo claro */}
+          <div className={`h-16 rounded-xl overflow-hidden border shadow-lg transition-all inline-flex
+            ${isDark
+              ? 'border-[#f5c842]/25 shadow-[#f5c842]/10'
+              : 'border-[#d4b870]/35 shadow-[#8B6914]/8'
+            }`} style={{ width: 'fit-content', aspectRatio: 'auto' }}>
+            <img src="/logo-borrachos.jpg" alt="Borrach@s y más" className="w-full h-full object-contain" />
           </div>
-          <p className={`text-xs italic text-center max-w-xs leading-relaxed ${isDark ? 'text-[#f5c842]/50' : 'text-[#8B6914]/55'}`}>
+          {/* Eslogan */}
+          <p className={`text-xs italic text-center max-w-xs leading-relaxed ${isDark ? 'text-[#f5c842]/50' : 'text-[#2a1f00]'}`}>
             &ldquo;Beber es una necesidad, pero saber beber es un Arte.&rdquo;
           </p>
-          <p className={`text-xs mt-1 ${isDark ? 'text-[#f5c842]/25' : 'text-[#8B6914]/30'}`}>
+          {/* Copyright */}
+          <p className={`text-xs mt-1 ${isDark ? 'text-[#f5c842]/25' : 'text-[#3a2a00]'}`}>
             &copy; 2026 Borrach@s y más. Todos los derechos reservados.
           </p>
         </div>

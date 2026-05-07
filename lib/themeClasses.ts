@@ -29,9 +29,9 @@ export function getThemeClasses(isDark: boolean) {
     textTitle: isDark ? 'text-[#f5c842]' : 'text-[#6b4f0a]',
     textTagline: isDark ? 'text-[#f5c842]/85' : 'text-[#8B6914]/80',
     textLabel: isDark ? 'text-[#f5c842]' : 'text-[#8B6914]',
-    textMuted: isDark ? 'text-[#f5c842]/60' : 'text-[#8B6914]/60',
-    textFaint: isDark ? 'text-[#f5c842]/40' : 'text-[#8B6914]/45',
-    textSub: isDark ? 'text-[#f5c842]/50' : 'text-[#8B6914]/55',
+    textMuted: isDark ? 'text-[#f5c842]/60' : 'text-[#4a3a0a]',
+    textFaint: isDark ? 'text-[#f5c842]/40' : 'text-[#2a1f00]',
+    textSub: isDark ? 'text-[#f5c842]/50' : 'text-[#3a2a00]',
     textRecipe: isDark ? 'text-[#f5c842]/90' : 'text-[#3a2200]/90',
     textSpinner: isDark ? 'text-[#f5c842]/75' : 'text-[#8B6914]/75',
     textRecommTitle: isDark ? 'text-[#f5c842]' : 'text-[#6b4f0a]',
@@ -46,8 +46,8 @@ export function getThemeClasses(isDark: boolean) {
     btnPrimary: isDark
       ? `bg-gradient-to-r from-[#f5c842] to-[#d4a832] hover:from-[#e6b830] hover:to-[#c49628]
          border border-[#f5c842]/50 text-[#000510] shadow-lg shadow-[#f5c842]/20`
-      : `bg-gradient-to-r from-[#c9a227] to-[#a07d10] hover:from-[#b8901f] hover:to-[#8f6e0a]
-         border border-[#c9a227]/60 text-white shadow-lg shadow-[#8B6914]/20`,
+      : `bg-gradient-to-r from-[#8B6914] to-[#6b4f0a] hover:from-[#7a5d12] hover:to-[#5a4208]
+         border border-[#8B6914]/60 text-[#ffffff] shadow-lg shadow-[#8B6914]/20`,
 
     // ── Botón cerrar sesión ──────────────────────────────────────────────────
     btnSignOut: isDark
@@ -87,7 +87,7 @@ export function getThemeClasses(isDark: boolean) {
         ? 'bg-[#f5c842]/20 text-[#f5c842]'
         : 'text-[#f5c842]/70 hover:bg-[#f5c842]/10 hover:text-[#f5c842]'
       : isActive
-        ? 'bg-[#8B6914]/20 text-[#6b4f0a]'
+        ? 'bg-[#8B6914]/20 text-[#8B6914]'
         : 'text-[#8B6914]/70 hover:bg-[#8B6914]/10 hover:text-[#8B6914]',
 
     // ── Título con sombra dorada ─────────────────────────────────────────────
