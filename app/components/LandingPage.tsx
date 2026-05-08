@@ -382,7 +382,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               viewport={{ once: true }} transition={{ duration: 0.6 }}
               className="p-8 border border-[#f5c842]/15 rounded-2xl bg-[#000810]">
               <p className="text-xs tracking-[0.2em] uppercase text-white/40 mb-2">Free</p>
-              <p className="font-serif text-4xl font-bold text-white mb-1">0 €</p>
+              <p className="font-serif text-4xl font-bold text-white mb-1">$0</p>
               <p className="text-sm text-white/40 mb-8">Para siempre</p>
               <ul className="space-y-3 mb-8">
                 {[
