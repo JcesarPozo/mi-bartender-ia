@@ -302,41 +302,93 @@ export default function Home() {
     const reqId = ++currentReqId.current;
     setActiveCocktailId(null); setLoading(true);
     setResponse(''); setError(''); setCocktailImage(null); setImageStatus(''); setImageLoading(false);
+
     const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
+    const token = session?.access_token;
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ prompt, shouldSave, locale, moodId: selectedMood }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error');
-      if (reqId !== currentReqId.current) return;
-      setResponse(data.response);
-      setSelectedMood(null);
-      const nameForImage     = data.cocktailName || 'cocktail';
-      const keywordsForImage = data.imagePrompt || null;
-      lastRecipeRef.current        = data.response;
-      lastImageKeywordsRef.current = keywordsForImage;
-      lastCocktailNameRef.current  = nameForImage;
-      const promptForImage = buildImagePrompt(nameForImage, data.response, keywordsForImage);
-      generateImage(promptForImage, nameForImage, reqId, data.cocktailId ?? undefined, accessToken, !!data.cocktailId);
-      if (shouldSave && data.cocktailId) {
-        setActiveCocktailId(data.cocktailId);
-        await loadCocktails();
-        if (data.jobId && accessToken) {
-          fetch('/api/process-job', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ jobId: data.jobId }) }).catch(() => {});
+
+      // Errores HTTP antes del stream (401, 429, 500...)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Error del servidor' }));
+        if (res.status === 429) { setPricingLimitReached(true); setShowPricing(true); }
+        else setError(data.error || 'Error');
+        return;
+      }
+
+      // Leer el stream SSE
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let streamedText = '';
+      let prefixText = '';
+
+      setLoading(false); // el modelo ya responde, quitamos el spinner
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (reqId !== currentReqId.current) { reader.cancel(); return; }
+
+        sseBuffer += decoder.decode(value, { stream: true });
+        const events = sseBuffer.split('\n\n');
+        sseBuffer = events.pop() ?? '';
+
+        for (const event of events) {
+          if (!event.startsWith('data: ')) continue;
+          let parsed: any;
+          try { parsed = JSON.parse(event.slice(6)); } catch { continue; }
+
+          if (parsed.type === 'token') {
+            streamedText += parsed.text;
+            setResponse(prefixText + streamedText);
+
+          } else if (parsed.type === 'prefix') {
+            // El servidor añadió un encabezado al inicio (nombre del cóctel)
+            prefixText = parsed.text;
+            setResponse(prefixText + streamedText);
+
+          } else if (parsed.type === 'error') {
+            setError(parsed.message || 'Error');
+
+          } else if (parsed.type === 'done') {
+            if (reqId !== currentReqId.current) return;
+            setSelectedMood(null);
+
+            const cocktailName = parsed.cocktailName || 'cocktail';
+            const imagePromptFinal = parsed.imagePrompt || `${cocktailName} cocktail drink, elegant glass`;
+
+            lastRecipeRef.current        = prefixText + streamedText;
+            lastCocktailNameRef.current  = cocktailName;
+            lastImageKeywordsRef.current = parsed.imagePrompt || null;
+            lastImagePromptRef.current   = imagePromptFinal;
+
+            generateImage(imagePromptFinal, cocktailName, reqId, parsed.cocktailId ?? undefined, token, !!parsed.cocktailId);
+
+            if (shouldSave && parsed.cocktailId) {
+              setActiveCocktailId(parsed.cocktailId);
+              await loadCocktails();
+              if (parsed.jobId && token) {
+                fetch('/api/process-job', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ jobId: parsed.jobId }),
+                }).catch(() => {});
+              }
+            }
+          }
         }
       }
     } catch (err: any) {
       if (reqId !== currentReqId.current) return;
-      if (err.message === 'LIMIT_REACHED' || err.status === 429) {
-        setPricingLimitReached(true); setShowPricing(true);
-      } else { setError(err.message || 'Error'); }
+      setError(err.message || 'Error');
     } finally {
-      if (reqId !== currentReqId.current) return;
-      setLoading(false);
+      if (reqId === currentReqId.current) setLoading(false);
     }
   };
 

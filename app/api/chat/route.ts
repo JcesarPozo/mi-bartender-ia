@@ -1,12 +1,9 @@
 // app/api/chat/route.ts
-import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { generateTags } from '@/lib/autoTags';
 
-// ----------------------------------------------------------------------
-// Funciones auxiliares de extracción
-// ----------------------------------------------------------------------
+// ── Helpers de extracción (sin cambios) ──────────────────────────────────────
 function extractCocktailName(text: string): string | null {
   const clean = (s: string) =>
     s.replace(/\*\*/g, '').replace(/\*/g, '').replace(/[🍹🍸🥂#]/g, '').trim();
@@ -29,44 +26,28 @@ function extractIngredientsForImage(text: string): string {
   const section = text.match(/ingredientes?[:\s]*\n([\s\S]*?)(?:\n#{1,3}|\n\*\*preparaci)/mi);
   if (!section) return '';
   return section[1]
-    .split('\n')
-    .slice(0, 4)
-    .map((l) => l.replace(/^[-*•\s\d.]+/, '').replace(/\d+ml|\d+oz|\d+cl/gi, '').trim())
-    .filter(Boolean)
-    .join(', ');
+    .split('\n').slice(0, 4)
+    .map(l => l.replace(/^[-*•\s\d.]+/, '').replace(/\d+ml|\d+oz|\d+cl/gi, '').trim())
+    .filter(Boolean).join(', ');
 }
 
-/**
- * Extrae guarniciones y decoraciones mencionadas en la receta.
- * Busca líneas que contengan palabras clave de decoración en español e inglés.
- */
 function extractGarnishFromRecipe(text: string): string {
   const lines = text.split('\n');
-  const garnishKeywords = [
-    'decora', 'garnish', 'guarnición', 'adorna', 'sirve con',
-    'rodaja', 'slice', 'twist', 'wedge', 'sprig', 'rama',
-    'cereza', 'cherry', 'piña', 'pineapple', 'naranja', 'orange',
-    'limón', 'lemon', 'lima', 'lime', 'menta', 'mint', 'salvia', 'sage',
-    'canela', 'cinnamon', 'sal', 'salt', 'azúcar', 'sugar rim',
-    'coco', 'coconut', 'fruta', 'fruit', 'flor', 'flower', 'hierba', 'herb',
+  const keywords = [
+    'decora','garnish','guarnición','adorna','sirve con','rodaja','slice','twist',
+    'wedge','sprig','rama','cereza','cherry','piña','pineapple','naranja','orange',
+    'limón','lemon','lima','lime','menta','mint','canela','cinnamon','sal','salt',
+    'azúcar','sugar rim','coco','coconut','flor','flower','hierba','herb',
   ];
-
   const found: string[] = [];
   for (const line of lines) {
     const lower = line.toLowerCase();
-    if (garnishKeywords.some((kw) => lower.includes(kw))) {
-      // Limpiar la línea: quitar markdown, numeración, etc.
-      const clean = line
-        .replace(/^[-*•\s\d.]+/, '')
-        .replace(/\*\*/g, '')
-        .replace(/\*/g, '')
-        .trim();
+    if (keywords.some(kw => lower.includes(kw))) {
+      const clean = line.replace(/^[-*•\s\d.]+/, '').replace(/\*\*/g, '').replace(/\*/g, '').trim();
       if (clean.length > 3 && clean.length < 80) found.push(clean);
     }
   }
-
-  // Traducir las piezas más comunes al inglés para Pollinations
-  const translations: Record<string, string> = {
+  const tr: Record<string, string> = {
     'cereza': 'maraschino cherry', 'cerezas': 'maraschino cherries',
     'rodaja de piña': 'pineapple slice', 'piña': 'pineapple slice',
     'rodaja de naranja': 'orange slice', 'naranja': 'orange slice',
@@ -80,300 +61,219 @@ function extractGarnishFromRecipe(text: string): string {
     'twist de naranja': 'orange twist', 'twist de limón': 'lemon twist',
     'flor comestible': 'edible flower', 'flor': 'edible flower',
   };
-
   const garnishEn: string[] = [];
   const allText = found.join(' ').toLowerCase();
-  for (const [es, en] of Object.entries(translations)) {
-    if (allText.includes(es) && !garnishEn.includes(en)) {
-      garnishEn.push(en);
-    }
+  for (const [es, en] of Object.entries(tr)) {
+    if (allText.includes(es) && !garnishEn.includes(en)) garnishEn.push(en);
   }
-
   return garnishEn.slice(0, 4).join(', ');
 }
 
-// ----------------------------------------------------------------------
-// Endpoint principal
-// ----------------------------------------------------------------------
+const PHOTO_SUFFIX = 'professional cocktail photography, studio lighting, bokeh background, photorealistic, 4k, sharp focus';
+
+function buildFinalImagePrompt(imageKeywords: string | null, recipeText: string, cocktailName: string | null): string {
+  if (imageKeywords) {
+    const base = imageKeywords.toLowerCase();
+    const garnish = extractGarnishFromRecipe(recipeText);
+    const missing = garnish.split(', ').filter(g => g && !base.includes(g.split(' ')[0])).join(', ');
+    return `${missing ? `${imageKeywords}, ${missing}` : imageKeywords}, ${PHOTO_SUFFIX}`;
+  }
+  const ingredients = extractIngredientsForImage(recipeText);
+  const garnish = extractGarnishFromRecipe(recipeText);
+  const garnishPart = garnish ? `, garnished with ${garnish}` : '';
+  return ingredients
+    ? `cocktail drink with ${ingredients}${garnishPart}, elegant glass, dark moody bar, ${PHOTO_SUFFIX}`
+    : `${cocktailName || 'tropical'} cocktail drink${garnishPart}, elegant glass, dark moody bar, ${PHOTO_SUFFIX}`;
+}
+
+// ── Endpoint principal ───────────────────────────────────────────────────────
 export async function POST(req: Request) {
-  try {
-    // Validar variables de entorno al inicio
-    if (!process.env.OPENROUTER_API_KEY) {
-      console.error('[chat] Error: OPENROUTER_API_KEY no definida');
-      return NextResponse.json({ error: 'Servidor no configurado correctamente' }, { status: 500 });
+  const encoder = new TextEncoder();
+
+  // Helper para emitir eventos SSE
+  const emit = (controller: ReadableStreamDefaultController, data: object) =>
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+
+  // Validar entorno
+  if (!process.env.OPENROUTER_API_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return new Response(JSON.stringify({ error: 'Servidor no configurado' }), { status: 500 });
+  }
+
+  // Auth
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  }
+  const token = authHeader.replace('Bearer ', '');
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+  if (userError || !user) {
+    return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 401 });
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  );
+
+  // Verificar límite (plan free)
+  const { data: subData } = await supabase
+    .from('user_subscriptions').select('plan, status').eq('user_id', user.id).maybeSingle();
+  const isPremium = subData?.plan === 'premium' && subData?.status === 'active';
+  if (!isPremium) {
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from('cocktails_invented').select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id).gte('created_at', startOfDay.toISOString());
+    if ((count ?? 0) >= 5) {
+      return new Response(JSON.stringify({ error: 'LIMIT_REACHED', todayCount: count, limit: 5 }), { status: 429 });
     }
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      console.error('[chat] Error: variables de Supabase no definidas');
-      return NextResponse.json({ error: 'Servidor no configurado correctamente' }, { status: 500 });
-    }
+  }
 
-    // 1. Obtener token del header Authorization
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'No autorizado: falta token' }, { status: 401 });
-    }
-    const token = authHeader.replace('Bearer ', '');
+  const { prompt, shouldSave = true, locale = 'es', moodId = null } = await req.json();
+  const isEnglish = locale === 'en';
 
-    // 2. Verificar el token con Supabase y obtener el usuario autenticado
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      console.error('[chat] Error de autenticación:', userError);
-      return NextResponse.json({ error: 'Token inválido o expirado' }, { status: 401 });
-    }
+  const systemPrompt = isEnglish ? `You are an expert and creative bartender. Always respond in English.
 
-    // 3. Crear cliente de Supabase autenticado (para que RLS funcione con auth.uid())
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      }
-    );
-
-    // 4. Inicializar OpenRouter DENTRO de la función POST (no en el módulo)
-    const openrouter = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey: process.env.OPENROUTER_API_KEY,
-      defaultHeaders: {
-        'HTTP-Referer': 'https://mi-bartender-ia.vercel.app',
-        'X-Title': 'Mi Bartender IA',
-      },
-    });
-
-    const { prompt, shouldSave = true, locale = 'es', moodId = null } = await req.json();
-
-    // ── Verificar plan y límite diario ──────────────────────────────────────
-    const { data: subData } = await supabase
-      .from('user_subscriptions')
-      .select('plan, status')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    const isPremium = subData?.plan === 'premium' && subData?.status === 'active';
-
-    if (!isPremium) {
-      // Contar cócteles creados hoy
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const { count } = await supabase
-        .from('cocktails_invented')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .gte('created_at', startOfDay.toISOString());
-
-      if ((count ?? 0) >= 5) {
-        return NextResponse.json(
-          { error: 'LIMIT_REACHED', todayCount: count, limit: 5 },
-          { status: 429 }
-        );
-      }
-    }
-
-    // 4. Llamar a la IA (OpenRouter)
-    const isEnglish = locale === 'en';
-
-    const systemPromptEs = `Eres un bartender experto y creativo. Responde siempre en español.
-
-OBLIGATORIO: Tu respuesta debe comenzar SIEMPRE con estas dos líneas, exactamente así:
-COCTEL: [nombre del cóctel]
-IMAGE: [descripción visual MUY específica del cóctel en inglés, 10-15 palabras]
-
-La línea IMAGE es crítica: describe el COLOR real de la bebida, el TIPO DE VASO exacto,
-la GUARNICIÓN visible y el AMBIENTE. Ejemplos de buenas descripciones IMAGE:
-
-COCTEL: Mojito Tropical
-IMAGE: bright green mojito in tall highball glass, mint leaves, lime wedge, crushed ice, dark bar background
-
-COCTEL: Negroni Ahumado
-IMAGE: deep amber negroni in crystal rocks glass, orange peel twist, smoky atmosphere, candlelight reflection
-
-COCTEL: Blue Lagoon
-IMAGE: electric blue cocktail in hurricane glass, maraschino cherry, lemon slice, tropical setting
-
-Reglas para la línea IMAGE:
-- Menciona el COLOR REAL de la bebida (amber, deep red, bright green, milky white, etc.)
-- Especifica el VASO (highball, martini, rocks, coupe, hurricane, wine glass, etc.)
-- Incluye la GUARNICIÓN que se ve (lime wedge, mint sprig, orange twist, salt rim, etc.)
-- Añade el AMBIENTE o LUZ (dark bar, tropical setting, candlelight, neon light, etc.)
-- Escribe SOLO en inglés, sin comillas
-
-Luego escribe la receta en Markdown.`;
-
-    const systemPromptEn = `You are an expert and creative bartender. Always respond in English.
-
-MANDATORY: Your response must ALWAYS start with these two lines, exactly like this:
+MANDATORY: Your response must ALWAYS start with these two lines:
 COCTEL: [cocktail name]
-IMAGE: [VERY specific visual description of the cocktail in English, 10-15 words]
+IMAGE: [VERY specific visual description in English, 10-15 words]
 
-The IMAGE line is critical: describe the REAL COLOR of the drink, the EXACT GLASS TYPE,
-the visible GARNISH, and the ATMOSPHERE. Examples of good IMAGE descriptions:
+Rules for IMAGE: mention REAL COLOR, EXACT GLASS TYPE, visible GARNISH, ATMOSPHERE. Only English, no quotes.
 
-COCTEL: Tropical Mojito
-IMAGE: bright green mojito in tall highball glass, mint leaves, lime wedge, crushed ice, dark bar background
+Then write the full recipe in Markdown.`
+  : `Eres un bartender experto y creativo. Responde siempre en español.
 
-COCTEL: Smoky Negroni
-IMAGE: deep amber negroni in crystal rocks glass, orange peel twist, smoky atmosphere, candlelight reflection
+OBLIGATORIO: Tu respuesta debe comenzar SIEMPRE con estas dos líneas:
+COCTEL: [nombre del cóctel]
+IMAGE: [descripción visual MUY específica en inglés, 10-15 palabras]
 
-COCTEL: Blue Lagoon
-IMAGE: electric blue cocktail in hurricane glass, maraschino cherry, lemon slice, tropical setting
+Reglas para IMAGE: menciona COLOR REAL, TIPO DE VASO exacto, GUARNICIÓN visible, AMBIENTE. Solo inglés, sin comillas.
 
-Rules for the IMAGE line:
-- Mention the REAL COLOR of the drink (amber, deep red, bright green, milky white, etc.)
-- Specify the GLASS (highball, martini, rocks, coupe, hurricane, wine glass, etc.)
-- Include the visible GARNISH (lime wedge, mint sprig, orange twist, salt rim, etc.)
-- Add the ATMOSPHERE or LIGHTING (dark bar, tropical setting, candlelight, neon light, etc.)
-- Write ONLY in English, no quotes
+Luego escribe la receta completa en Markdown.`;
 
-Then write the recipe in Markdown.`;
+  const openrouter = new OpenAI({
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: process.env.OPENROUTER_API_KEY,
+    defaultHeaders: {
+      'HTTP-Referer': 'https://mi-bartender-ia.vercel.app',
+      'X-Title': 'Mi Bartender IA',
+    },
+  });
 
-    const completion = await openrouter.chat.completions.create({
-      model: 'openrouter/free',
-      messages: [
-        {
-          role: 'system',
-          content: isEnglish ? systemPromptEn : systemPromptEs,
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.8,
-    });
+  // ── Stream principal ─────────────────────────────────────────────────────
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const completion = await openrouter.chat.completions.create({
+          model: 'openrouter/free',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+          stream: true,
+        });
 
-    const fullResponse = completion.choices[0]?.message?.content || 'No se generó respuesta.';
-    console.log('[chat] Respuesta modelo (primeras 400 chars):\n', fullResponse.substring(0, 400));
+        let rawBuffer   = '';   // acumula hasta parsear cabeceras
+        let fullRecipe  = '';   // receta limpia (sin COCTEL/IMAGE)
+        let headersDone = false;
+        let cocktailName: string | null = null;
+        let imageKeywords: string | null = null;
 
-    const cocktailName = extractCocktailName(fullResponse);
-    const imageKeywords = extractImageLine(fullResponse);
+        for await (const chunk of completion) {
+          const token = chunk.choices[0]?.delta?.content || '';
+          if (!token) continue;
 
-    console.log('[chat] cocktailName:', cocktailName);
-    console.log('[chat] imageKeywords:', imageKeywords);
+          if (!headersDone) {
+            // Acumular hasta tener las dos líneas de cabecera o >300 chars
+            rawBuffer += token;
+            const hasCoctel = /^C[OÓ]CTEL\s*:/mi.test(rawBuffer);
+            const hasImage  = /^IMAGE\s*:/mi.test(rawBuffer);
 
-    // Limpiar la respuesta para obtener solo la receta (sin las líneas COCTEL/IMAGE)
-    let recipeText = fullResponse
-      .replace(/^C[OÓ]CTEL\s*:\s*.+\n?/mi, '')
-      .replace(/^IMAGE\s*:\s*.+\n?/mi, '')
-      .trim();
+            if ((hasCoctel && hasImage) || rawBuffer.length > 350) {
+              cocktailName  = extractCocktailName(rawBuffer);
+              imageKeywords = extractImageLine(rawBuffer);
+              headersDone   = true;
 
-    // Si el modelo no incluyó el nombre del cóctel como encabezado en la receta,
-    // lo añadimos nosotros para que siempre sea visible en el panel principal.
-    if (cocktailName) {
-      const nameInRecipe =
-        recipeText.toLowerCase().includes(cocktailName.toLowerCase().substring(0, 8));
-      if (!nameInRecipe) {
-        recipeText = `### 🍹 ${cocktailName}\n\n${recipeText}`;
-      }
-    }
+              // Lo que queda tras las cabeceras, emitirlo ya
+              const recipeStart = rawBuffer
+                .replace(/^C[OÓ]CTEL\s*:\s*.+\n?/mi, '')
+                .replace(/^IMAGE\s*:\s*.+\n?/mi, '')
+                .trimStart();
 
-    // Construir prompt para la imagen
-    const photoSuffix = 'professional cocktail photography, studio lighting, bokeh background, photorealistic, 4k, sharp focus';
-
-    // Extraer guarniciones/decoraciones de la receta (siempre, independiente de IMAGE:)
-    const garnishFromRecipe = extractGarnishFromRecipe(recipeText);
-    console.log('[chat] garnishFromRecipe:', garnishFromRecipe);
-
-    let imagePrompt: string;
-    if (imageKeywords) {
-      // Fusionar: añadir sólo las guarniciones que el modelo NO mencionó en IMAGE:
-      const base = imageKeywords.toLowerCase();
-      const missingGarnish = garnishFromRecipe
-        .split(', ')
-        .filter((g) => g && !base.includes(g.split(' ')[0])) // evitar duplicados aproximados
-        .join(', ');
-      const combined = missingGarnish ? `${imageKeywords}, ${missingGarnish}` : imageKeywords;
-      imagePrompt = `${combined}, ${photoSuffix}`;
-    } else {
-      const ingredients = extractIngredientsForImage(recipeText);
-      const garnishPart = garnishFromRecipe ? `, garnished with ${garnishFromRecipe}` : '';
-      imagePrompt = ingredients
-        ? `cocktail drink with ${ingredients}${garnishPart}, elegant glass, dark moody bar, ${photoSuffix}`
-        : `${cocktailName || 'tropical'} cocktail drink${garnishPart}, elegant glass, dark moody bar, ${photoSuffix}`;
-    }
-    console.log('[chat] imagePrompt final:', imagePrompt);
-
-    let cocktailId: string | null = null;
-    let jobId: string | null = null;
-
-    // 5. Guardar en Supabase (solo si el usuario quiere guardar y tenemos nombre)
-    if (cocktailName && shouldSave) {
-      console.log('[chat] Intentando guardar cóctel:', cocktailName, 'user_id:', user.id);
-
-      // Verificar si ya existe un cóctel con el mismo nombre para este usuario
-      const { data: existing, error: existingError } = await supabase
-        .from('cocktails_invented')
-        .select('id')
-        .eq('name', cocktailName)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existingError) {
-        console.error('[chat] Error al buscar existencia:', existingError);
-      }
-
-      if (existing) {
-        cocktailId = existing.id;
-        console.log('[chat] El cóctel ya existe, id:', cocktailId);
-      } else {
-        // Insertar nuevo cóctel
-        const { data: newCocktail, error: insertError } = await supabase
-          .from('cocktails_invented')
-          .insert({
-            name: cocktailName,
-            recipe: recipeText,
-            image_path: null,
-            user_id: user.id,
-            rating: 0,
-            tags: generateTags(cocktailName, recipeText, moodId),
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          console.error('[chat] Error al insertar cóctel:', insertError);
-        } else {
-          cocktailId = newCocktail.id;
-          console.log('[chat] Cóctel insertado, id:', cocktailId);
-
-          // Crear un job para la generación de imagen (opcional)
-          const { data: newJob, error: jobError } = await supabase
-            .from('cocktail_jobs')
-            .insert({
-              user_id: user.id,
-              name: cocktailName,
-              recipe: recipeText,
-              image_prompt: imagePrompt,
-              status: 'pending',
-              image_path: null,
-              error: null,
-            })
-            .select()
-            .single();
-
-          if (jobError) {
-            console.error('[chat] Error al crear job:', jobError);
+              if (recipeStart) {
+                fullRecipe += recipeStart;
+                emit(controller, { type: 'token', text: recipeStart });
+              }
+            }
           } else {
-            jobId = newJob.id;
-            console.log('[chat] Job creado, id:', jobId);
+            fullRecipe += token;
+            emit(controller, { type: 'token', text: token });
           }
         }
-      }
-    } else {
-      console.log('[chat] No se guardó (shouldSave=', shouldSave, ', cocktailName=', cocktailName, ')');
-    }
 
-    // 6. Responder al frontend
-    return NextResponse.json({
-      response: recipeText,
-      cocktailId,
-      jobId,
-      cocktailName,
-      imagePrompt,
-    });
-  } catch (error: any) {
-    console.error('[chat] Error general:', error);
-    return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
-  }
+        // Si el modelo no incluyó el nombre en la receta, lo añadimos
+        if (cocktailName && !fullRecipe.toLowerCase().includes(cocktailName.toLowerCase().substring(0, 8))) {
+          const header = `### 🍹 ${cocktailName}\n\n`;
+          fullRecipe = header + fullRecipe;
+          // Notificar al cliente que hay un prefijo (lo insertamos al inicio)
+          emit(controller, { type: 'prefix', text: header });
+        }
+
+        const imagePrompt = buildFinalImagePrompt(imageKeywords, fullRecipe, cocktailName);
+
+        // ── Guardar en Supabase ─────────────────────────────────────────────
+        let cocktailId: string | null = null;
+        let jobId: string | null = null;
+
+        if (cocktailName && shouldSave) {
+          const { data: existing } = await supabase
+            .from('cocktails_invented').select('id')
+            .eq('name', cocktailName).eq('user_id', user.id).maybeSingle();
+
+          if (existing) {
+            cocktailId = existing.id;
+          } else {
+            const { data: newCocktail } = await supabase
+              .from('cocktails_invented')
+              .insert({ name: cocktailName, recipe: fullRecipe, image_path: null, user_id: user.id, rating: 0, tags: generateTags(cocktailName, fullRecipe, moodId) })
+              .select().single();
+            if (newCocktail) {
+              cocktailId = newCocktail.id;
+              const { data: newJob } = await supabase
+                .from('cocktail_jobs')
+                .insert({ user_id: user.id, name: cocktailName, recipe: fullRecipe, image_prompt: imagePrompt, status: 'pending', image_path: null, error: null })
+                .select().single();
+              if (newJob) jobId = newJob.id;
+            }
+          }
+        }
+
+        // Evento final con metadata
+        emit(controller, { type: 'done', cocktailId, jobId, cocktailName, imagePrompt });
+
+      } catch (err: any) {
+        console.error('[chat/stream]', err.message);
+        emit(controller, { type: 'error', message: err.message });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // desactiva buffering en Nginx/Vercel
+    },
+  });
 }
