@@ -97,7 +97,7 @@ export default function PricingModal({ onClose, onUpgrade, upgrading, limitReach
             {/* Precio */}
             <div className={`mt-6 rounded-xl p-4 text-center border ${goldBg}`}>
               <div className={`text-3xl font-bold font-serif ${isDark ? 'text-[#f5c842]' : 'text-[#6b4f0a]'}`}>
-                9,99 €
+                9.99 USD
                 <span className={`text-base font-normal ml-1 ${isDark ? 'text-[#f5c842]/60' : 'text-[#8B6914]/60'}`}>
                   / {locale === 'es' ? 'mes' : 'month'}
                 </span>

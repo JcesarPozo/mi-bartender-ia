@@ -10,7 +10,7 @@ export interface PlanConfig {
   name: string;
   nameEn: string;
   emoji: string;
-  price: number;          // EUR/mes
+  price: number;          // USD/mes
   cocktailsPerDay: number; // -1 = ilimitado
   catalogMax: number;      // -1 = ilimitado
   proMode: boolean;

@@ -422,7 +422,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               </div>
               <p className="text-xs tracking-[0.2em] uppercase text-[#f5c842]/60 mb-2">Pro</p>
               <div className="flex items-baseline gap-1.5 mb-1">
-                <p className="font-serif text-4xl font-bold text-[#f5c842]">9,99 €</p>
+                <p className="font-serif text-4xl font-bold text-[#f5c842]">$9.99</p>
                 <p className="text-sm text-[#f5c842]/50">/mes</p>
               </div>
               <p className="text-sm text-white/40 mb-8">Cancela cuando quieras</p>
