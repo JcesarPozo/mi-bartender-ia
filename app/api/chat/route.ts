@@ -139,24 +139,35 @@ export async function POST(req: Request) {
   const { prompt, shouldSave = true, locale = 'es', moodId = null } = await req.json();
   const isEnglish = locale === 'en';
 
-  const systemPrompt = isEnglish ? `You are an expert and creative bartender. Always respond in English.
+  const systemPrompt = isEnglish
+  ? `You are an expert creative bartender. YOU MUST ALWAYS RESPOND IN ENGLISH. NEVER use Spanish or any other language. Every single word of the recipe must be in English.
 
-MANDATORY: Your response must ALWAYS start with these two lines:
-COCTEL: [cocktail name]
-IMAGE: [VERY specific visual description in English, 10-15 words]
+MANDATORY FORMAT — start EVERY response with exactly these two lines:
+COCTEL: [cocktail name in English]
+IMAGE: [visual description in English, 10-15 words — color, glass type, garnish, atmosphere]
 
-Rules for IMAGE: mention REAL COLOR, EXACT GLASS TYPE, visible GARNISH, ATMOSPHERE. Only English, no quotes.
+Rules for IMAGE line: real drink color, exact glass (highball/martini/rocks/coupe), visible garnish, mood/lighting. English only, no quotes.
 
-Then write the full recipe in Markdown.`
-  : `Eres un bartender experto y creativo. Responde siempre en español.
+Then write the complete recipe in Markdown IN ENGLISH. Ingredients, steps, serving — everything in English.`
+  : `Eres un bartender experto y creativo. DEBES RESPONDER ÚnicAMENTE EN ESPAÑOL. NUNCA escribas en inglés ni en ningún otro idioma, ni siquiera parcialmente. Cada palabra visible al usuario debe estar en español.
 
-OBLIGATORIO: Tu respuesta debe comenzar SIEMPRE con estas dos líneas:
+FORMATO OBLIGATORIO — comienza SIEMPRE tu respuesta con exactamente estas dos líneas:
 COCTEL: [nombre del cóctel]
-IMAGE: [descripción visual MUY específica en inglés, 10-15 palabras]
+IMAGE: [descripción visual en inglés, 10-15 palabras — color, tipo de vaso, guarnición, ambiente]
 
-Reglas para IMAGE: menciona COLOR REAL, TIPO DE VASO exacto, GUARNICIÓN visible, AMBIENTE. Solo inglés, sin comillas.
+Reglas para la línea IMAGE: color real de la bebida, vaso exacto (highball/martini/rocks/coupe), guarnición visible, iluminación. Solo inglés, sin comillas.
 
-Luego escribe la receta completa en Markdown.`;
+Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medidas, pasos de preparación, presentación — TODO en español. Nunca uses términos en inglés en la receta.`;
+
+  // Forzar idioma: prefijo en el mensaje del usuario + primer turno de asistente condicionado
+  const userContent = isEnglish
+    ? `[RESPOND ENTIRELY IN ENGLISH] ${prompt}`
+    : `[RESPONDE ÚnicaMENTE EN ESPAÑOL] ${prompt}`;
+
+  // Primer turno falso del asistente para condicionar el idioma
+  const assistantPrimer = isEnglish
+    ? 'Understood! Here is my cocktail recommendation in English:\n\nCOCTEL:'
+    : '\u00a1Por supuesto! Aquí está mi recomendación de cóctel en español:\n\nCOCTEL:';
 
   const openrouter = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
@@ -174,14 +185,15 @@ Luego escribe la receta completa en Markdown.`;
         const completion = await openrouter.chat.completions.create({
           model: 'openrouter/free',
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
+            { role: 'system',    content: systemPrompt },
+            { role: 'user',      content: userContent },
+            { role: 'assistant', content: assistantPrimer },
           ],
           temperature: 0.8,
           stream: true,
         });
 
-        let rawBuffer   = '';   // acumula hasta parsear cabeceras
+        let rawBuffer   = assistantPrimer; // ya incluye el inicio "COCTEL:" del primer turno
         let fullRecipe  = '';   // receta limpia (sin COCTEL/IMAGE)
         let headersDone = false;
         let cocktailName: string | null = null;
