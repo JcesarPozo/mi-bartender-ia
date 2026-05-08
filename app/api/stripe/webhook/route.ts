@@ -52,13 +52,14 @@ export async function POST(req: Request) {
       if (!userId || !session.subscription) break;
 
       const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+      const periodEnd = subscription.items.data[0]?.current_period_end ?? null;
       await upsertSubscription(
         userId,
         session.customer as string,
         subscription.id,
         'premium',
         subscription.status,
-        subscription.current_period_end,
+        periodEnd,
       );
       console.log('[webhook] ✅ Nueva suscripción premium para user:', userId);
       break;
@@ -69,7 +70,8 @@ export async function POST(req: Request) {
       const userId = sub.metadata?.supabase_user_id;
       if (!userId) break;
       const plan = sub.status === 'active' ? 'premium' : 'free';
-      await upsertSubscription(userId, sub.customer as string, sub.id, plan, sub.status, sub.current_period_end);
+      const periodEnd = sub.items.data[0]?.current_period_end ?? null;
+      await upsertSubscription(userId, sub.customer as string, sub.id, plan, sub.status, periodEnd);
       console.log('[webhook] 🔄 Suscripción actualizada para user:', userId, '→', plan);
       break;
     }
