@@ -10,7 +10,7 @@ export interface PlanConfig {
   name: string;
   nameEn: string;
   emoji: string;
-  price: number;          // USD/mes
+  price: number;          // EUR/mes
   cocktailsPerDay: number; // -1 = ilimitado
   catalogMax: number;      // -1 = ilimitado
   proMode: boolean;
@@ -40,7 +40,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     name: 'Premium',
     nameEn: 'Premium',
     emoji: '🥂',
-    price: 4.99,
+    price: 9.99,
     cocktailsPerDay: -1,
     catalogMax: -1,
     proMode: true,
