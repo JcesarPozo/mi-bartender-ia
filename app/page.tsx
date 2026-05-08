@@ -341,6 +341,13 @@ export default function Home() {
       let streamedText = '';
       let prefixText = '';
 
+      // Filtro cliente: elimina líneas COCTEL:/IMAGE: que hayan escapado del servidor
+      const cleanRecipe = (text: string) =>
+        text
+          .replace(/^(?:COCTEL|CÓCTEL|CÓCTEL|IMAGE)\s*:\s*.+$/gim, '')
+          .replace(/^\s*\n/, '')
+          .trimStart();
+
       setLoading(false); // el modelo ya responde, quitamos el spinner
 
       while (true) {
@@ -359,12 +366,11 @@ export default function Home() {
 
           if (parsed.type === 'token') {
             streamedText += parsed.text;
-            setResponse(prefixText + streamedText);
+            setResponse(cleanRecipe(prefixText + streamedText));
 
           } else if (parsed.type === 'prefix') {
-            // El servidor añadió un encabezado al inicio (nombre del cóctel)
             prefixText = parsed.text;
-            setResponse(prefixText + streamedText);
+            setResponse(cleanRecipe(prefixText + streamedText));
 
           } else if (parsed.type === 'error') {
             setError(parsed.message || 'Error');

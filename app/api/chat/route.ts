@@ -193,32 +193,40 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
           stream: true,
         });
 
-        let rawBuffer   = assistantPrimer; // ya incluye el inicio "COCTEL:" del primer turno
-        let fullRecipe  = '';   // receta limpia (sin COCTEL/IMAGE)
+        let rawBuffer   = assistantPrimer;
+        let fullRecipe  = '';
         let headersDone = false;
         let cocktailName: string | null = null;
         let imageKeywords: string | null = null;
+
+        // Función auxiliar: strip de todas las líneas de cabecera (COCTEL: / IMAGE:)
+        // Se aplica tanto al rawBuffer como a cada token antes de emitir
+        const stripMetaLines = (text: string): string =>
+          text
+            .replace(/^C[OÓ]CTEL\s*:\s*.+$/gim, '')
+            .replace(/^IMAGE\s*:\s*.+$/gim, '')
+            .replace(/^\s*\n/, '')
+            .trimStart();
 
         for await (const chunk of completion) {
           const token = chunk.choices[0]?.delta?.content || '';
           if (!token) continue;
 
           if (!headersDone) {
-            // Acumular hasta tener las dos líneas de cabecera o >300 chars
             rawBuffer += token;
-            const hasCoctel = /^C[OÓ]CTEL\s*:/mi.test(rawBuffer);
-            const hasImage  = /^IMAGE\s*:/mi.test(rawBuffer);
+            const hasCoctel  = /^C[OÓ]CTEL\s*:/mi.test(rawBuffer);
+            const hasImage   = /^IMAGE\s*:/mi.test(rawBuffer);
+            // Esperamos hasta tener AMBAS cabeceras O hasta ver doble salto de línea
+            // (indica que el modelo ya pasó la zona de cabeceras y empezó la receta)
+            const pastHeaders = hasCoctel && rawBuffer.includes('\n\n');
 
-            if ((hasCoctel && hasImage) || rawBuffer.length > 350) {
+            if ((hasCoctel && hasImage) || pastHeaders || rawBuffer.length > 800) {
               cocktailName  = extractCocktailName(rawBuffer);
               imageKeywords = extractImageLine(rawBuffer);
               headersDone   = true;
 
-              // Lo que queda tras las cabeceras, emitirlo ya
-              const recipeStart = rawBuffer
-                .replace(/^C[OÓ]CTEL\s*:\s*.+\n?/mi, '')
-                .replace(/^IMAGE\s*:\s*.+\n?/mi, '')
-                .trimStart();
+              // Strip de cabeceras y cualquier residuo de IMAGE: / COCTEL:
+              const recipeStart = stripMetaLines(rawBuffer);
 
               if (recipeStart) {
                 fullRecipe += recipeStart;
@@ -226,8 +234,13 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
               }
             }
           } else {
-            fullRecipe += token;
-            emit(controller, { type: 'token', text: token });
+            // Filtro de seguridad: aunque headersDone=true, algunos modelos siguen
+            // emitiendo líneas IMAGE: tardías. Las descartamos antes de emitir.
+            const safeToken = stripMetaLines(token);
+            if (safeToken) {
+              fullRecipe += safeToken;
+              emit(controller, { type: 'token', text: safeToken });
+            }
           }
         }
 
