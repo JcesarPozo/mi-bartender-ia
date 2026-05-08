@@ -77,6 +77,7 @@ export default function Home() {
   const [showProBar, setShowProBar]         = useState(false);
   const [accessToken, setAccessToken]       = useState<string>('');
 
+  const moodPromptRef = useRef<string>(''); // prompt interno verboso que se envía a la IA
   const currentReqId         = useRef(0);
   const blobUrlRef           = useRef<string | null>(null);
   const mainPanelRef         = useRef<HTMLDivElement>(null);
@@ -163,9 +164,19 @@ export default function Home() {
   };
 
   const handleMoodSelect = (moodPrompt: string, moodId: string) => {
-    if (!moodId) { setSelectedMood(null); setPrompt(''); setResponse(''); setCocktailImage(null); setActiveCocktailId(null); return; }
+    if (!moodId) {
+      setSelectedMood(null);
+      setPrompt('');
+      moodPromptRef.current = '';
+      setResponse(''); setCocktailImage(null); setActiveCocktailId(null);
+      return;
+    }
     setSelectedMood(moodId);
-    setPrompt(moodPrompt);
+    // En el input solo mostramos el emoji + etiqueta (limpio y bonito)
+    const mood = t.app.moods.find(m => m.id === moodId);
+    setPrompt(mood ? `${mood.emoji} ${mood.label}` : moodId);
+    // El prompt verbose se guarda internamente para enviarlo a la IA
+    moodPromptRef.current = moodPrompt;
   };
 
   const persistImage = async (cocktailId: string, src: string | Blob, token: string) => {
@@ -299,6 +310,8 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || !user) return;
+    // Si hay mood activo, usar el prompt verbose interno; si no, usar lo que escribió el usuario
+    const actualPrompt = selectedMood && moodPromptRef.current ? moodPromptRef.current : prompt;
     const reqId = ++currentReqId.current;
     setActiveCocktailId(null); setLoading(true);
     setResponse(''); setError(''); setCocktailImage(null); setImageStatus(''); setImageLoading(false);
@@ -310,7 +323,7 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ prompt, shouldSave, locale, moodId: selectedMood }),
+        body: JSON.stringify({ prompt: actualPrompt, shouldSave, locale, moodId: selectedMood }),
       });
 
       // Errores HTTP antes del stream (401, 429, 500...)

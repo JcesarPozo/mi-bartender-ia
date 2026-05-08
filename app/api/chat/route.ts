@@ -164,10 +164,10 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
     ? `[RESPOND ENTIRELY IN ENGLISH] ${prompt}`
     : `[RESPONDE ÚnicaMENTE EN ESPAÑOL] ${prompt}`;
 
-  // Primer turno falso del asistente para condicionar el idioma
-  const assistantPrimer = isEnglish
-    ? 'Understood! Here is my cocktail recommendation in English:\n\nCOCTEL:'
-    : '\u00a1Por supuesto! Aquí está mi recomendación de cóctel en español:\n\nCOCTEL:';
+  // Primer turno falso del asistente — solo el ancla de formato, sin texto visible
+  // Usar solo "COCTEL:" garantiza que el modelo continúa en el idioma correcto
+  // y no añade texto previo que aparecería en el panel principal
+  const assistantPrimer = 'COCTEL:';
 
   const openrouter = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
