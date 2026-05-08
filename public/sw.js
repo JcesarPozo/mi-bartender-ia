@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bartender-ia-v1';
+const CACHE_NAME = 'bartender-ia-v2';
 const STATIC_ASSETS = [
   '/',
   '/logo-borrachos.jpg',
@@ -24,21 +24,24 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: Network First para API, Cache First para estáticos
+// Fetch: ignorar completamente rutas API y externas — el navegador las maneja solo
+// CRÍTICO: llamar event.respondWith() en rutas SSE/stream rompe la conexión
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Las peticiones a la API siempre van a la red
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(event.request));
-    return;
+  // NO interceptar: API routes, peticiones externas, datos POST
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.origin !== self.location.origin ||
+    event.request.method !== 'GET'
+  ) {
+    return; // dejar que el navegador maneje directamente, sin SW
   }
 
-  // Para todo lo demás: intenta red, cae en caché
+  // Solo cachear assets estáticos GET del mismo origen
   event.respondWith(
     fetch(event.request)
       .then((res) => {
-        // Guardar en caché si es una respuesta válida
         if (res && res.status === 200 && res.type === 'basic') {
           const clone = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
