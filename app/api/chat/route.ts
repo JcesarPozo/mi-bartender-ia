@@ -199,34 +199,21 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
         let cocktailName: string | null = null;
         let imageKeywords: string | null = null;
 
-        // Función auxiliar: strip de todas las líneas de cabecera (COCTEL: / IMAGE:)
-        // Se aplica tanto al rawBuffer como a cada token antes de emitir
-        const stripMetaLines = (text: string): string =>
-          text
-            .replace(/^C[OÓ]CTEL\s*:\s*.+$/gim, '')
-            .replace(/^IMAGE\s*:\s*.+$/gim, '')
-            .replace(/^\s*\n/, '')
-            .trimStart();
-
         for await (const chunk of completion) {
           const token = chunk.choices[0]?.delta?.content || '';
           if (!token) continue;
 
           if (!headersDone) {
             rawBuffer += token;
-            const hasCoctel  = /^C[OÓ]CTEL\s*:/mi.test(rawBuffer);
-            const hasImage   = /^IMAGE\s*:/mi.test(rawBuffer);
-            // Esperamos hasta tener AMBAS cabeceras O hasta ver doble salto de línea
-            // (indica que el modelo ya pasó la zona de cabeceras y empezó la receta)
-            const pastHeaders = hasCoctel && rawBuffer.includes('\n\n');
-
-            if ((hasCoctel && hasImage) || pastHeaders || rawBuffer.length > 800) {
+            // Buscamos el doble salto de línea que marca el fin del bloque de cabeceras
+            if (rawBuffer.includes('\n\n')) {
+              headersDone = true;
               cocktailName  = extractCocktailName(rawBuffer);
               imageKeywords = extractImageLine(rawBuffer);
-              headersDone   = true;
 
-              // Strip de cabeceras y cualquier residuo de IMAGE: / COCTEL:
-              const recipeStart = stripMetaLines(rawBuffer);
+              // Extraemos solo lo que está DESPUÉS del bloque de cabeceras
+              const parts = rawBuffer.split('\n\n');
+              const recipeStart = parts.slice(1).join('\n\n');
 
               if (recipeStart) {
                 fullRecipe += recipeStart;
@@ -234,18 +221,15 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
               }
             }
           } else {
-            // Filtro de seguridad: aunque headersDone=true, algunos modelos siguen
-            // emitiendo líneas IMAGE: tardías. Las descartamos antes de emitir.
-            const safeToken = stripMetaLines(token);
-            if (safeToken) {
-              fullRecipe += safeToken;
-              emit(controller, { type: 'token', text: safeToken });
-            }
+            fullRecipe += token;
+            emit(controller, { type: 'token', text: token });
           }
         }
 
         // Si el modelo no incluyó el nombre en la receta, lo añadimos
-        if (cocktailName && !fullRecipe.toLowerCase().includes(cocktailName.toLowerCase().substring(0, 8))) {
+        const hasTitle = cocktailName ? fullRecipe.toLowerCase().includes(cocktailName.toLowerCase()) : false;
+        
+        if (cocktailName && !hasTitle) {
           const header = `### 🍹 ${cocktailName}\n\n`;
           fullRecipe = header + fullRecipe;
           // Notificar al cliente que hay un prefijo (lo insertamos al inicio)

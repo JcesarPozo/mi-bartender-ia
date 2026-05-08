@@ -28,7 +28,12 @@ export default function ShareCardModal({
   const extractIngredients = (text: string) => {
     // Busca el bloque de ingredientes y detente antes de la preparación
     const match = text.match(/(?:###?\s*Ingredientes|Ingredients|Ingredientes)([\s\S]*?)(?:###?\s*Preparación|Instructions|Preparation|Preparación|$)/i);
-    return match ? match[1].trim() : text.substring(0, 150); // Fallback si no encuentra el tag
+    if (!match) return text.substring(0, 150);
+    
+    // Limpiamos los caracteres de markdown como '#' y reducimos espacios excesivos
+    return match[1]
+      .replace(/^#+\s*/gm, '') // Elimina '#' al inicio de las líneas
+      .trim();
   };
 
   const ingredientsSnippet = extractIngredients(recipe);
