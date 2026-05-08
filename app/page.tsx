@@ -6,13 +6,17 @@ import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import AuthModal from './components/AuthModal';
+import LandingPage from './components/LandingPage';
 import MoodSelector from './components/MoodSelector';
 import StarRating from './components/StarRating';
 import TagFilter from './components/TagFilter';
 import ShareCardModal from './components/ShareCardModal';
+import PricingModal from './components/PricingModal';
+import ProBar from './components/ProBar';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
 import { getTagById } from '@/lib/autoTags';
+import type { Plan } from '@/lib/plans';
 
 interface Cocktail {
   id: string;
@@ -43,7 +47,7 @@ const fadeIn: Variants = {
 
 const scaleIn: Variants = {
   hidden:  { opacity: 0, scale: 0.88 },
-  visible: { opacity: 1, scale: 1,   transition: { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] as unknown as 'easeOut' } },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] as unknown as 'easeOut' } },
   exit:    { opacity: 0, scale: 0.92, transition: { duration: 0.2 } },
 };
 
@@ -53,6 +57,7 @@ export default function Home() {
 
   const [user, setUser]                     = useState<User | null>(null);
   const [authLoading, setAuthLoading]       = useState(true);
+  const [showAuth, setShowAuth]             = useState(false);   // ← nuevo: controla el modal de login
   const [prompt, setPrompt]                 = useState('');
   const [selectedMood, setSelectedMood]     = useState<string | null>(null);
   const [response, setResponse]             = useState('');
@@ -67,6 +72,12 @@ export default function Home() {
   const [activeCocktailId, setActiveCocktailId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter]     = useState<string | null>(null);
   const [shareTarget, setShareTarget]       = useState<Cocktail | null>(null);
+  const [userPlan, setUserPlan]             = useState<Plan>('free');
+  const [showPricing, setShowPricing]       = useState(false);
+  const [pricingLimitReached, setPricingLimitReached] = useState(false);
+  const [upgrading, setUpgrading]           = useState(false);
+  const [showProBar, setShowProBar]         = useState(false);
+  const [accessToken, setAccessToken]       = useState<string>('');
 
   const currentReqId         = useRef(0);
   const blobUrlRef           = useRef<string | null>(null);
@@ -85,14 +96,65 @@ export default function Home() {
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) setShowAuth(false); // cerrar modal al autenticarse
     });
     return () => { subscription.unsubscribe(); if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current); };
   }, []);
 
   useEffect(() => {
-    if (user) { loadCocktails(); imageCache.current.clear(); }
+    if (user) { loadCocktails(); loadPlan(); imageCache.current.clear(); }
     else setCocktailsList([]);
   }, [user]);
+
+  const loadPlan = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) setAccessToken(session.access_token);
+    const { data } = await supabase
+      .from('user_subscriptions')
+      .select('plan, status')
+      .eq('user_id', user!.id)
+      .maybeSingle();
+    const active = data?.plan === 'premium' && data?.status === 'active';
+    setUserPlan(active ? 'premium' : 'free');
+  };
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          locale,
+          successUrl: `${window.location.origin}/?upgraded=true`,
+          cancelUrl: window.location.origin,
+        }),
+      });
+      const { url } = await res.json();
+      if (url) window.location.href = url;
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
+  const handleManagePlan = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/stripe/portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ returnUrl: window.location.origin }),
+    });
+    const { url } = await res.json();
+    if (url) window.location.href = url;
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('upgraded=true')) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => loadPlan(), 2000);
+    }
+  }, []);
 
   const handlePromptChange = (value: string) => {
     setPrompt(value);
@@ -108,7 +170,6 @@ export default function Home() {
     setPrompt(moodPrompt);
   };
 
-  // ─── Persistir imagen ─────────────────────────────────────────────────────
   const persistImage = async (cocktailId: string, src: string | Blob, token: string) => {
     try {
       let publicUrl: string | null = null;
@@ -130,7 +191,8 @@ export default function Home() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setResponse(''); setCocktailImage(null); setActiveCocktailId(null);
-    setPrompt(''); setSelectedMood(null); setActiveFilter(null); imageCache.current.clear();
+    setPrompt(''); setSelectedMood(null); setActiveFilter(null);
+    setShowProBar(false); imageCache.current.clear();
   };
 
   const loadCocktails = async () => {
@@ -140,25 +202,15 @@ export default function Home() {
     if (data) setCocktailsList(data as Cocktail[]);
   };
 
-  // ─── Valorar ──────────────────────────────────────────────────────────────
   const handleRate = async (cocktailId: string, stars: number) => {
-    const { error: rErr } = await supabase
-      .from('cocktails_invented')
-      .update({ rating: stars })
-      .eq('id', cocktailId);
-
-    if (rErr) {
-      console.error('Error al guardar valoración:', rErr.message);
-    } else {
-      setCocktailsList(prev => prev.map(c => c.id === cocktailId ? { ...c, rating: stars } : c));
-    }
+    const { error: rErr } = await supabase.from('cocktails_invented').update({ rating: stars }).eq('id', cocktailId);
+    if (rErr) console.error('Error al guardar valoración:', rErr.message);
+    else setCocktailsList(prev => prev.map(c => c.id === cocktailId ? { ...c, rating: stars } : c));
   };
 
-  // ─── Tags y filtros ───────────────────────────────────────────────────────
   const allAvailableTags  = [...new Set(cocktailsList.flatMap(c => c.tags || []))];
   const filteredCocktails = activeFilter ? cocktailsList.filter(c => (c.tags || []).includes(activeFilter)) : cocktailsList;
 
-  // ─── Borrar ───────────────────────────────────────────────────────────────
   const handleDeleteCocktail = async (cocktail: Cocktail) => {
     if (!window.confirm(app.confirmDelete(cocktail.name))) return;
     setDeletingId(cocktail.id);
@@ -173,7 +225,6 @@ export default function Home() {
     finally { setDeletingId(null); }
   };
 
-  // ─── Ver receta ───────────────────────────────────────────────────────────
   const handleViewCocktail = async (cocktail: Cocktail) => {
     const reqId = ++currentReqId.current;
     setActiveCocktailId(cocktail.id);
@@ -185,19 +236,16 @@ export default function Home() {
     lastRecipeRef.current        = cocktail.recipe;
     lastImageKeywordsRef.current = null;
     lastImagePromptRef.current   = buildImagePrompt(cocktail.name, cocktail.recipe, null);
-
     if (cocktail.image_path?.trim() && !cocktail.image_path.includes('default-cocktail')) {
       imageCache.current.set(cocktail.id, cocktail.image_path);
       setCocktailImage(cocktail.image_path); return;
     }
     const cached = imageCache.current.get(cocktail.id);
     if (cached) { setCocktailImage(cached); return; }
-
     const { data: { session } } = await supabase.auth.getSession();
     generateImage(`${cocktail.name} cocktail drink, elegant glass, professional bar photo`, cocktail.name, reqId, cocktail.id, session?.access_token, true);
   };
 
-  // ─── Regenerar imagen ─────────────────────────────────────────────────────
   const handleRegenerateImage = async () => {
     if (imageLoading) return;
     const reqId = ++currentReqId.current;
@@ -213,7 +261,6 @@ export default function Home() {
     generateImage(variantPrompt, cocktailName, reqId, activeCocktailId ?? undefined, token, !!activeCocktailId);
   };
 
-  // ─── Generar imagen ───────────────────────────────────────────────────────
   const generateImage = async (imagePrompt: string, cocktailName: string, reqId: number, cocktailId?: string, token?: string, saveToDb = false) => {
     lastImagePromptRef.current  = imagePrompt;
     lastCocktailNameRef.current = cocktailName;
@@ -222,7 +269,6 @@ export default function Home() {
     setImageLoading(true);
     setImageStatus(app.generatingImage.replace('🎨 ', ''));
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-
     try {
       const res = await fetch('/api/pollinations-proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: imagePrompt }) });
       if (!isActive()) return;
@@ -252,17 +298,14 @@ export default function Home() {
     finally { if (isActive()) setImageLoading(false); }
   };
 
-  // ─── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || !user) return;
     const reqId = ++currentReqId.current;
     setActiveCocktailId(null); setLoading(true);
     setResponse(''); setError(''); setCocktailImage(null); setImageStatus(''); setImageLoading(false);
-
     const { data: { session } } = await supabase.auth.getSession();
     const accessToken = session?.access_token;
-
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -272,19 +315,15 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error');
       if (reqId !== currentReqId.current) return;
-
       setResponse(data.response);
       setSelectedMood(null);
-
       const nameForImage     = data.cocktailName || 'cocktail';
       const keywordsForImage = data.imagePrompt || null;
       lastRecipeRef.current        = data.response;
       lastImageKeywordsRef.current = keywordsForImage;
       lastCocktailNameRef.current  = nameForImage;
-
       const promptForImage = buildImagePrompt(nameForImage, data.response, keywordsForImage);
       generateImage(promptForImage, nameForImage, reqId, data.cocktailId ?? undefined, accessToken, !!data.cocktailId);
-
       if (shouldSave && data.cocktailId) {
         setActiveCocktailId(data.cocktailId);
         await loadCocktails();
@@ -294,29 +333,54 @@ export default function Home() {
       }
     } catch (err: any) {
       if (reqId !== currentReqId.current) return;
-      setError(err.message || 'Error');
+      if (err.message === 'LIMIT_REACHED' || err.status === 429) {
+        setPricingLimitReached(true); setShowPricing(true);
+      } else { setError(err.message || 'Error'); }
     } finally {
       if (reqId !== currentReqId.current) return;
       setLoading(false);
     }
   };
 
-  // ─── Pantalla de carga / auth ──────────────────────────────────────────────
+  // ─── Estados de carga y pre-auth ──────────────────────────────────────────
   if (authLoading) return (
-    <div className={`min-h-screen flex items-center justify-center ${tc.pageBg}`}>
+    <div className="min-h-screen flex items-center justify-center bg-[#000810]">
       <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-4">
         <div className="text-6xl animate-bounce">🍸</div>
-        <div className={`w-8 h-8 border-4 border-t-transparent rounded-full animate-spin ${tc.spinner}`} />
+        <div className="w-8 h-8 border-4 border-[#f5c842] border-t-transparent rounded-full animate-spin" />
       </motion.div>
     </div>
   );
-  if (!user) return <AuthModal onAuthSuccess={() => {}} />;
 
-  // ─── App ──────────────────────────────────────────────────────────────────
+  // ← Landing page + modal de auth flotando encima
+  if (!user) return (
+    <>
+      <LandingPage onGetStarted={() => setShowAuth(true)} />
+      <AnimatePresence>
+        {showAuth && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowAuth(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            >
+              <AuthModal onAuthSuccess={() => setShowAuth(false)} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+
+  // ─── App principal ────────────────────────────────────────────────────────
   return (
     <div className={`min-h-screen transition-colors duration-300 ${tc.pageBg}`}>
 
-      {/* Modal Compartir */}
       <AnimatePresence>
         {shareTarget && (
           <ShareCardModal
@@ -332,7 +396,6 @@ export default function Home() {
 
       <div className="container mx-auto px-4 py-6 md:py-10 max-w-6xl">
 
-        {/* Topbar */}
         <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
           className="flex items-center justify-between mb-6 px-1 gap-2 flex-wrap">
           <div className="flex items-center gap-2">
@@ -350,7 +413,6 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
 
-          {/* ── Panel principal ── */}
           <div className="lg:col-span-2" ref={mainPanelRef}>
             <motion.header initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: 'easeOut' }} className="text-center mb-8">
               <motion.div animate={{ rotate: [0, -8, 8, -4, 4, 0] }} transition={{ duration: 1.2, delay: 0.5, ease: 'easeInOut' }} className="text-7xl md:text-8xl mb-4 inline-block">🍸</motion.div>
@@ -378,9 +440,7 @@ export default function Home() {
               </form>
 
               <AnimatePresence>
-                {error && (
-                  <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-6 p-4 rounded-xl text-sm border ${tc.errorBox}`}>❌ {error}</motion.div>
-                )}
+                {error && <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-6 p-4 rounded-xl text-sm border ${tc.errorBox}`}>❌ {error}</motion.div>}
               </AnimatePresence>
 
               <AnimatePresence>
@@ -407,23 +467,17 @@ export default function Home() {
                     <img key={cocktailImage} src={cocktailImage} alt="Cóctel"
                       className={`rounded-xl shadow-lg max-h-72 object-cover border-2 ${tc.borderImg}`}
                       onError={() => setCocktailImage('/default-cocktail.jpg')} />
-
                     <div className="flex items-center gap-2 flex-wrap justify-center">
                       <motion.button onClick={handleRegenerateImage} disabled={imageLoading}
                         whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 ${tc.btnToggle}`}>
                         <span>🎲</span><span>{app.changeImage}</span>
                       </motion.button>
-
                       <motion.button
                         whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                         onClick={() => {
                           const cocktail = cocktailsList.find(c => c.id === activeCocktailId);
-                          setShareTarget(cocktail ?? {
-                            id: '', name: lastCocktailNameRef.current || 'Cóctel',
-                            recipe: lastRecipeRef.current, image_path: cocktailImage,
-                            created_at: '', user_id: '', rating: 0, tags: [],
-                          });
+                          setShareTarget(cocktail ?? { id: '', name: lastCocktailNameRef.current || 'Cóctel', recipe: lastRecipeRef.current, image_path: cocktailImage, created_at: '', user_id: '', rating: 0, tags: [] });
                         }}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${tc.btnToggle}`}>
                         <span>📤</span><span>{app.shareCard}</span>
@@ -435,32 +489,24 @@ export default function Home() {
             </motion.div>
           </div>
 
-          {/* ── Catálogo ── */}
           <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.3 }} className="lg:col-span-1 flex flex-col">
             <div className={`rounded-2xl p-5 flex flex-col flex-1 ${tc.catalogBg}`}>
-
               <div className="mb-4">
                 <h2 className={`text-2xl font-bold ${tc.textPrimary}`}>{app.catalog}</h2>
                 <p className={`text-xs mt-1 ${tc.textSub}`}>{app.cocktailsSaved(cocktailsList.length)}</p>
               </div>
-
               <TagFilter availableTags={allAvailableTags} activeFilter={activeFilter} onFilter={setActiveFilter} />
-
               {cocktailsList.length === 0 ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-                  className="flex-1 flex flex-col items-center justify-center text-center py-8">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="flex-1 flex flex-col items-center justify-center text-center py-8">
                   <p className="text-4xl mb-3">🍹</p>
                   <p className={`text-sm ${tc.textMuted}`}>{app.noCocktails}</p>
                   <p className={`text-xs mt-1 ${tc.textFaint}`}>{app.noCocktailsHint}</p>
                 </motion.div>
-
               ) : filteredCocktails.length === 0 ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="flex-1 flex flex-col items-center justify-center text-center py-8">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 flex flex-col items-center justify-center text-center py-8">
                   <p className="text-3xl mb-3">🔍</p>
                   <p className={`text-sm ${tc.textMuted}`}>{app.noResults}</p>
                 </motion.div>
-
               ) : (
                 <div className="space-y-3 overflow-y-auto flex-1 pr-1">
                   <AnimatePresence initial={false}>
@@ -470,69 +516,47 @@ export default function Home() {
                       return (
                         <motion.div key={item.id} custom={i} variants={fadeUp} initial="hidden" animate="visible" exit="exit" layout
                           className={`rounded-xl border transition-all duration-200 overflow-hidden ${tc.catalogCard(isActive)}`}>
-
                           <div className="flex items-center gap-3 p-3">
                             <div className={`w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border ${tc.thumbBg} ${tc.borderThumb}`}>
-                              {item.image_path
-                                ? <img src={item.image_path} alt={item.name} className="w-full h-full object-cover" />
-                                : <div className="w-full h-full flex items-center justify-center text-xl">🍸</div>
-                              }
+                              {item.image_path ? <img src={item.image_path} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xl">🍸</div>}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className={`font-bold text-sm truncate ${tc.catalogCardTitle(isActive)}`}>{item.name}</p>
                               <div className="mt-0.5 flex items-center gap-2">
                                 <StarRating rating={item.rating || 0} cocktailId={item.id} onRate={handleRate} size="sm" />
-                                <span className={`text-[10px] ${tc.textFaint}`}>
-                                  {new Date(item.created_at).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { day: '2-digit', month: 'short' })}
-                                </span>
+                                <span className={`text-[10px] ${tc.textFaint}`}>{new Date(item.created_at).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { day: '2-digit', month: 'short' })}</span>
                               </div>
                             </div>
                           </div>
-
                           <div className="px-3 pb-1">
-                            <p className={`text-xs leading-relaxed line-clamp-2 ${tc.textSub}`}>
-                              {item.recipe?.replace(/[#*`]/g, '').substring(0, 80)}...
-                            </p>
+                            <p className={`text-xs leading-relaxed line-clamp-2 ${tc.textSub}`}>{item.recipe?.replace(/[#*`]/g, '').substring(0, 80)}...</p>
                           </div>
-
                           {(item.tags || []).length > 0 && (
                             <div className="flex flex-wrap gap-1 px-3 pb-2">
                               {(item.tags || []).slice(0, 3).map(tagId => {
                                 const tag = getTagById(tagId);
                                 if (!tag) return null;
                                 return (
-                                  <span key={tagId}
-                                    className={`text-[10px] px-1.5 py-0.5 rounded-full border cursor-pointer transition-all
-                                      ${activeFilter === tagId
-                                        ? isDark ? 'border-[#f5c842]/60 bg-[#f5c842]/15 text-[#f5c842]' : 'border-[#8B6914]/60 bg-[#8B6914]/15 text-[#6b4f0a]'
-                                        : isDark ? 'border-[#f5c842]/15 text-[#f5c842]/55 hover:border-[#f5c842]/35' : 'border-[#8B6914]/15 text-[#8B6914]/55 hover:border-[#8B6914]/35'
-                                      }`}
-                                    onClick={() => setActiveFilter(activeFilter === tagId ? null : tagId)}>
+                                  <span key={tagId} onClick={() => setActiveFilter(activeFilter === tagId ? null : tagId)}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded-full border cursor-pointer transition-all ${activeFilter === tagId ? isDark ? 'border-[#f5c842]/60 bg-[#f5c842]/15 text-[#f5c842]' : 'border-[#8B6914]/60 bg-[#8B6914]/15 text-[#6b4f0a]' : isDark ? 'border-[#f5c842]/15 text-[#f5c842]/55 hover:border-[#f5c842]/35' : 'border-[#8B6914]/15 text-[#8B6914]/55 hover:border-[#8B6914]/35'}`}>
                                     {tag.emoji} {locale === 'es' ? tag.label : tag.labelEn}
                                   </span>
                                 );
                               })}
                             </div>
                           )}
-
                           <div className={`flex border-t ${tc.borderDivider}`}>
                             <button onClick={() => handleViewCocktail(item)} disabled={isDeleting}
                               className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${tc.btnView(isActive)}`}>
                               {isActive ? app.visible : `👁 ${app.viewRecipe}`}
                             </button>
                             <div className={`w-px ${tc.borderDivider}`} />
-                            <button onClick={() => setShareTarget({ ...item, image_path: imageCache.current.get(item.id) || item.image_path })}
-                              title={app.shareCard}
-                              className={`px-3 py-2 text-xs font-semibold transition-all ${tc.btnView(false)}`}>
-                              📤
-                            </button>
+                            <button onClick={() => setShareTarget({ ...item, image_path: imageCache.current.get(item.id) || item.image_path })} title={app.shareCard}
+                              className={`px-3 py-2 text-xs font-semibold transition-all ${tc.btnView(false)}`}>📤</button>
                             <div className={`w-px ${tc.borderDivider}`} />
                             <button onClick={() => handleDeleteCocktail(item)} disabled={isDeleting}
                               className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-red-400/70 hover:bg-red-900/30 hover:text-red-300 transition-all disabled:opacity-40">
-                              {isDeleting
-                                ? <><span className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /><span>{app.deleting}</span></>
-                                : <><span>🗑</span><span>{app.delete}</span></>
-                              }
+                              {isDeleting ? <><span className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /><span>{app.deleting}</span></> : <><span>🗑</span><span>{app.delete}</span></>}
                             </button>
                           </div>
                         </motion.div>
@@ -543,43 +567,25 @@ export default function Home() {
               )}
             </div>
           </motion.div>
-
         </div>
       </div>
 
-      {/* Footer */}
       <motion.footer initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 0.6 }} className="mt-16 pb-10">
-        {/* Separador decorativo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-4">
             <div className={`w-20 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
-            <span className={`text-xs tracking-[0.3em] uppercase font-medium whitespace-nowrap ${isDark ? 'text-[#f5c842]/30' : 'text-[#8B6914]/40'}`}>
-              {locale === 'es' ? 'Con sabor a fiesta' : 'Crafted with taste'}
-            </span>
+            <span className={`text-xs tracking-[0.3em] uppercase font-medium whitespace-nowrap ${isDark ? 'text-[#f5c842]/30' : 'text-[#8B6914]/40'}`}>{locale === 'es' ? 'Con sabor a fiesta' : 'Crafted with taste'}</span>
             <div className={`w-20 h-px ${isDark ? 'bg-[#f5c842]/10' : 'bg-[#8B6914]/15'}`} />
           </div>
         </div>
-        {/* Contenido footer */}
         <div className="flex flex-col items-center gap-4">
-          {/* Logo con menos borde en modo claro */}
-          <div className={`h-16 rounded-xl overflow-hidden border shadow-lg transition-all inline-flex
-            ${isDark
-              ? 'border-[#f5c842]/25 shadow-[#f5c842]/10'
-              : 'border-[#d4b870]/35 shadow-[#8B6914]/8'
-            }`} style={{ width: 'fit-content', aspectRatio: 'auto' }}>
+          <div className={`h-16 rounded-xl overflow-hidden border shadow-lg transition-all inline-flex ${isDark ? 'border-[#f5c842]/25 shadow-[#f5c842]/10' : 'border-[#d4b870]/35 shadow-[#8B6914]/8'}`} style={{ width: 'fit-content' }}>
             <img src="/logo-borrachos.jpg" alt="Borrach@s y más" className="w-full h-full object-contain" />
           </div>
-          {/* Eslogan */}
-          <p className={`text-xs italic text-center max-w-xs leading-relaxed ${isDark ? 'text-[#f5c842]/50' : 'text-[#2a1f00]'}`}>
-            &ldquo;Beber es una necesidad, pero saber beber es un Arte.&rdquo;
-          </p>
-          {/* Copyright */}
-          <p className={`text-xs mt-1 ${isDark ? 'text-[#f5c842]/25' : 'text-[#3a2a00]'}`}>
-            &copy; 2026 Borrach@s y más. Todos los derechos reservados.
-          </p>
+          <p className={`text-xs italic text-center max-w-xs leading-relaxed ${isDark ? 'text-[#f5c842]/50' : 'text-[#2a1f00]'}`}>&ldquo;Beber es una necesidad, pero saber beber es un Arte.&rdquo;</p>
+          <p className={`text-xs mt-1 ${isDark ? 'text-[#f5c842]/25' : 'text-[#3a2a00]'}`}>&copy; 2026 Borrach@s y más. Todos los derechos reservados.</p>
         </div>
       </motion.footer>
-
     </div>
   );
 }
