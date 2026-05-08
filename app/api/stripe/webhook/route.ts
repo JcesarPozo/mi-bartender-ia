@@ -86,8 +86,10 @@ export async function POST(req: Request) {
     }
 
     case 'invoice.payment_failed': {
-      const invoice = event.data.object as Stripe.Invoice;
-      const subId   = invoice.subscription as string;
+      // En la API 2026, Invoice.subscription fue movido — lo extendemos para seguir leyéndolo
+      type InvoiceWithSub = Stripe.Invoice & { subscription?: string | null };
+      const invoice = event.data.object as InvoiceWithSub;
+      const subId   = invoice.subscription;
       if (!subId) break;
       const sub = await stripe.subscriptions.retrieve(subId);
       const userId = sub.metadata?.supabase_user_id;
