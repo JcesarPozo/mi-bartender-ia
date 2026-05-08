@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/?upgraded=true`,
       cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/`,
       locale: locale === 'es' ? 'es' : 'en',
+      metadata: { supabase_user_id: user.id },
       subscription_data: {
         metadata: { supabase_user_id: user.id },
       },
