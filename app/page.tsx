@@ -11,8 +11,6 @@ import MoodSelector from './components/MoodSelector';
 import StarRating from './components/StarRating';
 import TagFilter from './components/TagFilter';
 import ShareCardModal from './components/ShareCardModal';
-import PricingModal from './components/PricingModal';
-import ProBar from './components/ProBar';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
 import { getTagById } from '@/lib/autoTags';

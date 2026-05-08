@@ -147,6 +147,33 @@ export async function POST(req: Request) {
 
     const { prompt, shouldSave = true, locale = 'es', moodId = null } = await req.json();
 
+    // ── Verificar plan y límite diario ──────────────────────────────────────
+    const { data: subData } = await supabase
+      .from('user_subscriptions')
+      .select('plan, status')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const isPremium = subData?.plan === 'premium' && subData?.status === 'active';
+
+    if (!isPremium) {
+      // Contar cócteles creados hoy
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('cocktails_invented')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', startOfDay.toISOString());
+
+      if ((count ?? 0) >= 5) {
+        return NextResponse.json(
+          { error: 'LIMIT_REACHED', todayCount: count, limit: 5 },
+          { status: 429 }
+        );
+      }
+    }
+
     // 4. Llamar a la IA (OpenRouter)
     const isEnglish = locale === 'en';
 
