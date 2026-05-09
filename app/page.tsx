@@ -94,13 +94,27 @@ export default function Home() {
 
   // ─── Auth ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        // Token expirado o inválido → limpiar sesión solo localmente (sin llamar al servidor)
+        supabase.auth.signOut({ scope: 'local' });
+        setUser(null);
+      } else {
+        setUser(session?.user ?? null);
+      }
       setAuthLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) setShowAuth(false); // cerrar modal al autenticarse
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        setUser(null);
+        setResponse(''); setCocktailImage(null); setActiveCocktailId(null);
+        setPrompt(''); setSelectedMood(null); imageCache.current.clear();
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setUser(session?.user ?? null);
+        if (session?.user) setShowAuth(false);
+      } else {
+        setUser(session?.user ?? null);
+      }
     });
     return () => { subscription.unsubscribe(); if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current); };
   }, []);
@@ -514,7 +528,7 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
 
-          <div className="lg:col-span-2" ref={mainPanelRef}>
+          <div className="lg:col-span-2 relative" ref={mainPanelRef}>
             <motion.header initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: 'easeOut' }} className="text-center mb-8">
               <motion.div animate={{ rotate: [0, -8, 8, -4, 4, 0] }} transition={{ duration: 1.2, delay: 0.5, ease: 'easeInOut' }} className="text-7xl md:text-8xl mb-4 inline-block">🍸</motion.div>
               <h1 className={`text-4xl md:text-6xl font-bold font-serif ${tc.textTitle} ${tc.titleGlow}`}>{app.title}</h1>
@@ -572,7 +586,16 @@ export default function Home() {
               </AnimatePresence>
 
               <AnimatePresence>
-                {response && (
+                {loading && (
+                  <motion.div variants={fadeIn} initial="hidden" animate="visible" exit="exit" className="mt-6 flex flex-col items-center gap-3">
+                    <div className={`w-10 h-10 border-4 border-t-transparent rounded-full animate-spin ${tc.spinner}`} />
+                    <p className={`text-sm ${tc.textSpinner}`}>🍸 {app.mixing || 'Mezclando ingredientes...'}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {response && !loading && (
                   <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-8 p-5 rounded-xl ${tc.recipeBox}`}>
                     <h2 className={`text-xl font-bold mb-2 ${tc.textRecommTitle}`}>{app.recommendation}</h2>
                     <div className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-stone'} ${tc.textRecipe}`}><ReactMarkdown>{response}</ReactMarkdown></div>

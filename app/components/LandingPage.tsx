@@ -164,7 +164,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       </header>
 
       {/* ════ HERO ═══════════════════════════════════════════════════════════ */}
-      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
+      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16" style={{ position: 'relative' }}>
 
         {/* Gradientes de fondo */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_50%_-5%,rgba(245,200,66,0.11),transparent)]" />

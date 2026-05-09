@@ -62,7 +62,6 @@ export async function POST(req: Request) {
         .from('cocktails_invented')
         .select('id').eq('name', saveRequest.cocktailName).eq('user_id', user.id).maybeSingle();
 
-      if (!existing) {
         const { data: saved } = await supabase.from('cocktails_invented').insert({
           name: saveRequest.cocktailName,
           recipe: saveRequest.recipe,
@@ -82,6 +81,7 @@ export async function POST(req: Request) {
     const systemPrompt = isEnglish
       ? `You are an expert and creative personal bartender having a live conversation with your client.
 You remember everything discussed in the conversation and can refine cocktails based on feedback.
+tone: creative | visionary
 
 CONVERSATION RULES:
 - Be warm, professional, and personable — like a real bartender behind the bar
@@ -120,16 +120,18 @@ Cuando proporciones una receta, incluye siempre:
         'HTTP-Referer': 'https://mi-bartender-ia.vercel.app',
         'X-Title': 'Mi Bartender IA — Pro',
       },
-    });
+      timeout: 30000,
+  });
 
     const completion = await openrouter.chat.completions.create({
+
       model: 'openrouter/free',
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages.map(m => ({ role: m.role, content: m.content })),
       ],
       temperature: 0.85,
-      max_tokens: 1200,
+      max_tokens: 800,
     });
 
     const reply = completion.choices[0]?.message?.content || '';

@@ -161,6 +161,7 @@ export async function POST(req: Request) {
 
   const systemPrompt = isEnglish
     ? `You are an expert creative bartender. YOU MUST ALWAYS RESPOND IN ENGLISH. NEVER use Spanish.
+tone: creative | visionary
 
 MANDATORY FORMAT — start EVERY response with exactly these two lines (FIRST, before anything else):
 COCTEL: [cocktail name in English]
@@ -182,6 +183,7 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL.`;
       'HTTP-Referer': 'https://mi-bartender-ia.vercel.app',
       'X-Title': 'Mi Bartender IA',
     },
+    timeout: 30000,
   });
 
   const stream = new ReadableStream({

@@ -38,6 +38,7 @@ export async function GET(req: Request) {
       'HTTP-Referer': 'https://mi-bartender-ia.vercel.app',
       'X-Title': 'Mi Bartender IA — Daily',
     },
+    timeout: 30000,
   });
 
   const prompt = isEnglish

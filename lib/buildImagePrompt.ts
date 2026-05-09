@@ -112,7 +112,7 @@ export function buildImagePrompt(
   imageKeywords?: string | null,
 ): string {
   const suffix =
-    'professional cocktail photography, studio lighting, bokeh background, photorealistic, 4k, sharp focus';
+    'tone: creative | visionary, professional cocktail photography, studio lighting, bokeh background, photorealistic, 4k, sharp focus';
 
   const garnishes = extractGarnishes(recipe);
 
