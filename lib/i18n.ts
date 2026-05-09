@@ -6,7 +6,8 @@ export interface Mood {
   id: string;
   emoji: string;
   label: string;
-  prompt: string;
+  hint: string;   // texto corto que se muestra en el input
+  prompt: string; // prompt verbose que se envía a la IA (no visible)
 }
 
 export interface AppTranslations {
@@ -153,12 +154,12 @@ export const translations: Record<Locale, Translations> = {
       noResults: 'No hay cócteles con esta etiqueta.',
       starRated: (n: number) => `${n} estrella${n !== 1 ? 's' : ''}`,
       moods: [
-        { id: 'romantic',  emoji: '💑', label: 'Romántico',   prompt: 'Quiero un cóctel romántico y sofisticado para una cena especial en pareja' },
-        { id: 'party',     emoji: '🎉', label: 'Fiesta',      prompt: 'Quiero un cóctel divertido y festivo para una fiesta con amigos, algo colorido y con mucho sabor' },
-        { id: 'chill',     emoji: '🌅', label: 'Relajado',    prompt: 'Quiero un cóctel relajante y suave para una tarde tranquila' },
-        { id: 'noalcohol', emoji: '🌿', label: 'Sin alcohol', prompt: 'Quiero un cóctel sin alcohol, refrescante y delicioso (mocktail)' },
-        { id: 'tropical',  emoji: '🌴', label: 'Tropical',    prompt: 'Quiero un cóctel tropical, exótico y refrescante con sabores frutales' },
-        { id: 'classic',   emoji: '🎩', label: 'Clásico',     prompt: 'Quiero un cóctel clásico y elegante, de los que se han servido en los mejores bares del mundo' },
+        { id: 'romantic',  emoji: '💑', label: 'Romántico',   hint: 'algo romántico para una cena de dos',        prompt: 'Quiero un cóctel romántico y sofisticado para una cena especial en pareja' },
+        { id: 'party',     emoji: '🎉', label: 'Fiesta',      hint: 'algo festivo y colorido para el grupo',       prompt: 'Quiero un cóctel divertido y festivo para una fiesta con amigos, algo colorido y con mucho sabor' },
+        { id: 'chill',     emoji: '🌅', label: 'Relajado',    hint: 'algo suave para relajarme esta tarde',        prompt: 'Quiero un cóctel relajante y suave para una tarde tranquila' },
+        { id: 'noalcohol', emoji: '🌿', label: 'Sin alcohol', hint: 'un mocktail fresco, sin alcohol',             prompt: 'Quiero un cóctel sin alcohol, refrescante y delicioso (mocktail)' },
+        { id: 'tropical',  emoji: '🌴', label: 'Tropical',    hint: 'algo tropical y frutal bien helado',          prompt: 'Quiero un cóctel tropical, exótico y refrescante con sabores frutales' },
+        { id: 'classic',   emoji: '🎩', label: 'Clásico',     hint: 'un clásico elegante, de los de siempre',      prompt: 'Quiero un cóctel clásico y elegante, de los que se han servido en los mejores bares del mundo' },
       ],
     },
   },
@@ -230,12 +231,12 @@ export const translations: Record<Locale, Translations> = {
       noResults: 'No cocktails with this tag.',
       starRated: (n: number) => `${n} star${n !== 1 ? 's' : ''}`,
       moods: [
-        { id: 'romantic',  emoji: '💑', label: 'Romantic',    prompt: 'I want a romantic and sophisticated cocktail for a special dinner for two' },
-        { id: 'party',     emoji: '🎉', label: 'Party',       prompt: 'I want a fun and festive cocktail for a party with friends, something colorful and flavorful' },
-        { id: 'chill',     emoji: '🌅', label: 'Chill',       prompt: 'I want a relaxing and smooth cocktail for a quiet afternoon' },
-        { id: 'noalcohol', emoji: '🌿', label: 'No alcohol',  prompt: 'I want a non-alcoholic cocktail, refreshing and delicious (mocktail)' },
-        { id: 'tropical',  emoji: '🌴', label: 'Tropical',    prompt: 'I want a tropical, exotic and refreshing cocktail with fruity flavors' },
-        { id: 'classic',   emoji: '🎩', label: 'Classic',     prompt: "I want a classic and elegant cocktail, the kind served in the world's finest bars" },
+        { id: 'romantic',  emoji: '💑', label: 'Romantic',    hint: 'something romantic for a dinner for two',     prompt: 'I want a romantic and sophisticated cocktail for a special dinner for two' },
+        { id: 'party',     emoji: '🎉', label: 'Party',       hint: 'something fun and colorful for the group',    prompt: 'I want a fun and festive cocktail for a party with friends, something colorful and flavorful' },
+        { id: 'chill',     emoji: '🌅', label: 'Chill',       hint: 'something smooth to unwind this afternoon',   prompt: 'I want a relaxing and smooth cocktail for a quiet afternoon' },
+        { id: 'noalcohol', emoji: '🌿', label: 'No alcohol',  hint: 'a fresh mocktail, no alcohol',                prompt: 'I want a non-alcoholic cocktail, refreshing and delicious (mocktail)' },
+        { id: 'tropical',  emoji: '🌴', label: 'Tropical',    hint: 'something tropical and fruity, extra cold',   prompt: 'I want a tropical, exotic and refreshing cocktail with fruity flavors' },
+        { id: 'classic',   emoji: '🎩', label: 'Classic',     hint: 'a timeless classic from the finest bars',     prompt: "I want a classic and elegant cocktail, the kind served in the world's finest bars" },
       ],
     },
   },

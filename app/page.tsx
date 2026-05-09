@@ -11,10 +11,12 @@ import MoodSelector from './components/MoodSelector';
 import StarRating from './components/StarRating';
 import TagFilter from './components/TagFilter';
 import ShareCardModal from './components/ShareCardModal';
+import DailyDrink from './components/DailyDrink';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
 import { getTagById } from '@/lib/autoTags';
 import type { Plan } from '@/lib/plans';
+import { getRetryMessage, isResponseBad } from '@/lib/retryMessages';
 
 interface Cocktail {
   id: string;
@@ -76,6 +78,9 @@ export default function Home() {
   const [upgrading, setUpgrading]           = useState(false);
   const [showProBar, setShowProBar]         = useState(false);
   const [accessToken, setAccessToken]       = useState<string>('');
+  const [retryMsg, setRetryMsg]             = useState<string>('');
+  const [retryCount, setRetryCount]         = useState(0);
+  const retryMsgIndexRef                    = useRef<number | null>(null);
 
   const moodPromptRef = useRef<string>(''); // prompt interno verboso que se envía a la IA
   const currentReqId         = useRef(0);
@@ -169,13 +174,17 @@ export default function Home() {
       setPrompt('');
       moodPromptRef.current = '';
       setResponse(''); setCocktailImage(null); setActiveCocktailId(null);
+      setError(''); setImageStatus(''); setImageLoading(false);
       return;
     }
+    // Limpiar siempre el panel al cambiar de ocasión
+    setResponse(''); setCocktailImage(null); setActiveCocktailId(null);
+    setError(''); setImageStatus(''); setImageLoading(false);
     setSelectedMood(moodId);
-    // En el input solo mostramos el emoji + etiqueta (limpio y bonito)
+    // Input muestra el hint corto (ilustrativo, editable por el usuario)
     const mood = t.app.moods.find(m => m.id === moodId);
-    setPrompt(mood ? `${mood.emoji} ${mood.label}` : moodId);
-    // El prompt verbose se guarda internamente para enviarlo a la IA
+    setPrompt(mood?.hint ?? '');
+    // El prompt verbose solo va a la IA
     moodPromptRef.current = moodPrompt;
   };
 
@@ -307,14 +316,16 @@ export default function Home() {
     finally { if (isActive()) setImageLoading(false); }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent, _retryAttempt = 0) => {
+    if (e?.preventDefault) e.preventDefault();
     if (!prompt.trim() || !user) return;
-    // Si hay mood activo, usar el prompt verbose interno; si no, usar lo que escribió el usuario
+
+    const MAX_RETRIES = 3;
     const actualPrompt = selectedMood && moodPromptRef.current ? moodPromptRef.current : prompt;
     const reqId = ++currentReqId.current;
     setActiveCocktailId(null); setLoading(true);
     setResponse(''); setError(''); setCocktailImage(null); setImageStatus(''); setImageLoading(false);
+    if (_retryAttempt === 0) { setRetryMsg(''); setRetryCount(0); }
 
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -377,6 +388,27 @@ export default function Home() {
 
           } else if (parsed.type === 'done') {
             if (reqId !== currentReqId.current) return;
+
+            const finalText = prefixText + streamedText;
+
+            // ── Detectar respuesta mala y reintentar ───────────────────────────
+            if (isResponseBad(finalText) && _retryAttempt < MAX_RETRIES) {
+              const { msg, index } = getRetryMessage(retryMsgIndexRef.current, locale);
+              retryMsgIndexRef.current = index;
+              setRetryMsg(msg);
+              setRetryCount(_retryAttempt + 1);
+              setResponse(''); setLoading(true);
+              // Esperar 1.5s para que el usuario lea el mensaje, luego reintentar
+              setTimeout(() => {
+                if (reqId === currentReqId.current) {
+                  handleSubmit({ preventDefault: () => {} } as React.FormEvent, _retryAttempt + 1);
+                }
+              }, 1800);
+              return;
+            }
+
+            // Respuesta OK—limpiar mensaje de reintento
+            setRetryMsg(''); setRetryCount(0);
             setSelectedMood(null);
 
             const cocktailName = parsed.cocktailName || 'cocktail';
@@ -512,6 +544,33 @@ export default function Home() {
                 {error && <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-6 p-4 rounded-xl text-sm border ${tc.errorBox}`}>❌ {error}</motion.div>}
               </AnimatePresence>
 
+              {/* Banner de reintento con mensaje de bartender */}
+              <AnimatePresence>
+                {retryMsg && (
+                  <motion.div
+                    key={retryMsg}
+                    initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.35 }}
+                    className={`mt-5 p-4 rounded-xl border flex items-start gap-3
+                      ${isDark ? 'bg-[#f5c842]/6 border-[#f5c842]/20' : 'bg-[#c9a227]/6 border-[#c9a227]/25'}`}
+                  >
+                    <span className="text-2xl shrink-0 mt-0.5">👨‍🍳</span>
+                    <div>
+                      <p className={`text-sm font-semibold ${isDark ? 'text-[#f5c842]' : 'text-[#6b4f0a]'}`}>
+                        {retryMsg}
+                      </p>
+                      <p className={`text-xs mt-1 ${isDark ? 'text-[#f5c842]/50' : 'text-[#8B6914]/60'}`}>
+                        {locale === 'es'
+                          ? `Intento ${retryCount} de ${3}...`
+                          : `Attempt ${retryCount} of ${3}...`}
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <AnimatePresence>
                 {response && (
                   <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-8 p-5 rounded-xl ${tc.recipeBox}`}>
@@ -559,6 +618,29 @@ export default function Home() {
           </div>
 
           <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.3 }} className="lg:col-span-1 flex flex-col">
+
+            {/* Cóctel del Día */}
+            <DailyDrink
+              onShowRecipe={(name, recipe, imagePrompt) => {
+                const reqId = ++currentReqId.current;
+                setResponse(recipe);
+                setError('');
+                setCocktailImage(null);
+                setActiveCocktailId(null);
+                setPrompt('');
+                setSelectedMood(null);
+                lastCocktailNameRef.current  = name;
+                lastRecipeRef.current        = recipe;
+                lastImageKeywordsRef.current = imagePrompt || null;
+                // Usar el imagePrompt del modelo (contiene el vaso real: "copper mug", etc.)
+                // Si no hay, derivarlo de la receta
+                const imgPrompt = imagePrompt || buildImagePrompt(name, recipe, null);
+                lastImagePromptRef.current = imgPrompt;
+                mainPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                generateImage(imgPrompt, name, reqId, undefined, undefined, false);
+              }}
+            />
+
             <div className={`rounded-2xl p-5 flex flex-col flex-1 ${tc.catalogBg}`}>
               <div className="mb-4">
                 <h2 className={`text-2xl font-bold ${tc.textPrimary}`}>{app.catalog}</h2>

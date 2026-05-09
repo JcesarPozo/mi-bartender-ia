@@ -1,9 +1,8 @@
-// app/api/chat/route.ts
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { generateTags } from '@/lib/autoTags';
 
-// ── Helpers de extracción (sin cambios) ──────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function extractCocktailName(text: string): string | null {
   const clean = (s: string) =>
     s.replace(/\*\*/g, '').replace(/\*/g, '').replace(/[🍹🍸🥂#]/g, '').trim();
@@ -17,8 +16,8 @@ function extractCocktailName(text: string): string | null {
 }
 
 function extractImageLine(text: string): string | null {
-  const p1 = text.match(/^IMAGE\s*:\s*(.+)$/mi);
-  if (p1) return p1[1].replace(/^["'`]|["'`]$/g, '').trim();
+  const p = text.match(/^IMAGE\s*:\s*(.+)$/mi);
+  if (p) return p[1].replace(/^["'`]|["'`]$/g, '').trim();
   return null;
 }
 
@@ -31,75 +30,96 @@ function extractIngredientsForImage(text: string): string {
     .filter(Boolean).join(', ');
 }
 
+// Mapeo de vasos español → inglés para el prompt de imagen
+const GLASS_MAP: [RegExp, string][] = [
+  [/taza\s+de\s+cobre|mule\s+mug/gi,          'copper mug'],
+  [/copa\s+de\s+martini|martini/gi,            'martini glass'],
+  [/copa\s+de\s+champán|champagne|flauta/gi,   'champagne flute'],
+  [/vaso\s+highball|highball/gi,               'highball glass'],
+  [/vaso\s+rocks|old[\s-]fashioned|whisky/gi,  'rocks glass'],
+  [/copa\s+de\s+vino|wine\s+glass/gi,          'wine glass'],
+  [/copa\s+coupe|coupe/gi,                     'coupe glass'],
+  [/tiki|tropical\s+cup/gi,                    'tiki mug'],
+  [/jarra|pitcher/gi,                          'pitcher glass'],
+  [/shot|chupito/gi,                           'shot glass'],
+  [/snifter|brandy/gi,                         'brandy snifter'],
+];
+
+function extractGlassFromRecipe(text: string): string {
+  for (const [regex, english] of GLASS_MAP) {
+    if (regex.test(text)) return english;
+  }
+  return '';
+}
+
 function extractGarnishFromRecipe(text: string): string {
-  const lines = text.split('\n');
-  const keywords = [
-    'decora','garnish','guarnición','adorna','sirve con','rodaja','slice','twist',
-    'wedge','sprig','rama','cereza','cherry','piña','pineapple','naranja','orange',
-    'limón','lemon','lima','lime','menta','mint','canela','cinnamon','sal','salt',
-    'azúcar','sugar rim','coco','coconut','flor','flower','hierba','herb',
+  const keywords: [RegExp, string][] = [
+    [/cereza|cherry/gi,             'maraschino cherry'],
+    [/rodaja\s+de\s+lima|lime\s+wheel/gi, 'lime wheel'],
+    [/cu\xf1a\s+de\s+lima|lime\s+wedge/gi, 'lime wedge'],
+    [/rodaja\s+de\s+lim\xf3n|lemon\s+wheel/gi, 'lemon wheel'],
+    [/twist\s+de\s+naranja|orange\s+twist/gi, 'orange twist'],
+    [/rodaja\s+de\s+naranja|orange\s+slice/gi, 'orange slice'],
+    [/rama\s+de\s+menta|sprig\s+of\s+mint|menta\s+fresca/gi, 'fresh mint sprig'],
+    [/sal\s+en\s+el\s+borde|salt\s+rim/gi, 'salt rim'],
+    [/az\xfacar\s+en\s+el\s+borde|sugar\s+rim/gi, 'sugar rim'],
+    [/canela|cinnamon/gi,           'cinnamon stick'],
+    [/coco\s+rallado|coconut/gi,    'coconut flakes'],
+    [/flor\s+comestible|edible\s+flower/gi, 'edible flower'],
+    [/pi\xf1a|pineapple/gi,         'pineapple slice'],
+    [/apio|celery/gi,               'celery stalk'],
   ];
   const found: string[] = [];
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (keywords.some(kw => lower.includes(kw))) {
-      const clean = line.replace(/^[-*•\s\d.]+/, '').replace(/\*\*/g, '').replace(/\*/g, '').trim();
-      if (clean.length > 3 && clean.length < 80) found.push(clean);
-    }
+  for (const [regex, english] of keywords) {
+    if (regex.test(text) && !found.includes(english)) found.push(english);
   }
-  const tr: Record<string, string> = {
-    'cereza': 'maraschino cherry', 'cerezas': 'maraschino cherries',
-    'rodaja de piña': 'pineapple slice', 'piña': 'pineapple slice',
-    'rodaja de naranja': 'orange slice', 'naranja': 'orange slice',
-    'rodaja de limón': 'lemon slice', 'limón': 'lemon slice',
-    'rodaja de lima': 'lime slice', 'lima': 'lime wedge',
-    'menta': 'fresh mint sprig', 'hierbabuena': 'fresh mint leaves',
-    'sal en el borde': 'salt rim', 'borde de sal': 'salt rim',
-    'azúcar en el borde': 'sugar rim', 'borde de azúcar': 'sugar rim',
-    'canela': 'cinnamon stick', 'rama de canela': 'cinnamon stick',
-    'coco rallado': 'shredded coconut rim', 'coco': 'coconut flakes',
-    'twist de naranja': 'orange twist', 'twist de limón': 'lemon twist',
-    'flor comestible': 'edible flower', 'flor': 'edible flower',
-  };
-  const garnishEn: string[] = [];
-  const allText = found.join(' ').toLowerCase();
-  for (const [es, en] of Object.entries(tr)) {
-    if (allText.includes(es) && !garnishEn.includes(en)) garnishEn.push(en);
-  }
-  return garnishEn.slice(0, 4).join(', ');
+  return found.slice(0, 3).join(', ');
 }
 
 const PHOTO_SUFFIX = 'professional cocktail photography, studio lighting, bokeh background, photorealistic, 4k, sharp focus';
 
-function buildFinalImagePrompt(imageKeywords: string | null, recipeText: string, cocktailName: string | null): string {
-  if (imageKeywords) {
-    const base = imageKeywords.toLowerCase();
-    const garnish = extractGarnishFromRecipe(recipeText);
-    const missing = garnish.split(', ').filter(g => g && !base.includes(g.split(' ')[0])).join(', ');
-    return `${missing ? `${imageKeywords}, ${missing}` : imageKeywords}, ${PHOTO_SUFFIX}`;
+function buildFinalImagePrompt(
+  imageKeywordsFromModel: string | null,
+  recipeText: string,
+  cocktailName: string | null,
+): string {
+  // Si el modelo dio IMAGE: con keywords, usarlos directamente (ya en inglés)
+  if (imageKeywordsFromModel && imageKeywordsFromModel.length > 10) {
+    return `${imageKeywordsFromModel}, ${PHOTO_SUFFIX}`;
   }
+
+  // Si no, construir desde la receta
+  const glass      = extractGlassFromRecipe(recipeText);
+  const garnish    = extractGarnishFromRecipe(recipeText);
   const ingredients = extractIngredientsForImage(recipeText);
-  const garnish = extractGarnishFromRecipe(recipeText);
-  const garnishPart = garnish ? `, garnished with ${garnish}` : '';
-  return ingredients
-    ? `cocktail drink with ${ingredients}${garnishPart}, elegant glass, dark moody bar, ${PHOTO_SUFFIX}`
-    : `${cocktailName || 'tropical'} cocktail drink${garnishPart}, elegant glass, dark moody bar, ${PHOTO_SUFFIX}`;
+  const glassStr   = glass   ? `in a ${glass}` : 'in an elegant glass';
+  const garnishStr = garnish ? `, garnished with ${garnish}` : '';
+  const base       = ingredients
+    ? `cocktail drink with ${ingredients} ${glassStr}${garnishStr}, dark moody bar`
+    : `${cocktailName || 'tropical'} cocktail ${glassStr}${garnishStr}, dark moody bar`;
+
+  return `${base}, ${PHOTO_SUFFIX}`;
 }
 
-// ── Endpoint principal ───────────────────────────────────────────────────────
+// Limpiar el texto de cabeceras COCTEL: / IMAGE:
+function cleanRecipeText(raw: string): string {
+  return raw
+    .replace(/^C[OÓ]CTEL\s*:\s*.+$/gmi, '')
+    .replace(/^IMAGE\s*:\s*.+$/gmi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimStart();
+}
+
+// ── Endpoint ──────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   const encoder = new TextEncoder();
+  const emit = (ctrl: ReadableStreamDefaultController, data: object) =>
+    ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 
-  // Helper para emitir eventos SSE
-  const emit = (controller: ReadableStreamDefaultController, data: object) =>
-    controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-
-  // Validar entorno
-  if (!process.env.OPENROUTER_API_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (!process.env.OPENROUTER_API_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return new Response(JSON.stringify({ error: 'Servidor no configurado' }), { status: 500 });
   }
 
-  // Auth
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
@@ -122,7 +142,7 @@ export async function POST(req: Request) {
     { global: { headers: { Authorization: `Bearer ${token}` } } }
   );
 
-  // Verificar límite (plan free)
+  // Límite plan free
   const { data: subData } = await supabase
     .from('user_subscriptions').select('plan, status').eq('user_id', user.id).maybeSingle();
   const isPremium = subData?.plan === 'premium' && subData?.status === 'active';
@@ -132,7 +152,7 @@ export async function POST(req: Request) {
       .from('cocktails_invented').select('id', { count: 'exact', head: true })
       .eq('user_id', user.id).gte('created_at', startOfDay.toISOString());
     if ((count ?? 0) >= 5) {
-      return new Response(JSON.stringify({ error: 'LIMIT_REACHED', todayCount: count, limit: 5 }), { status: 429 });
+      return new Response(JSON.stringify({ error: 'LIMIT_REACHED', limit: 5 }), { status: 429 });
     }
   }
 
@@ -140,34 +160,20 @@ export async function POST(req: Request) {
   const isEnglish = locale === 'en';
 
   const systemPrompt = isEnglish
-  ? `You are an expert creative bartender. YOU MUST ALWAYS RESPOND IN ENGLISH. NEVER use Spanish or any other language. Every single word of the recipe must be in English.
+    ? `You are an expert creative bartender. YOU MUST ALWAYS RESPOND IN ENGLISH. NEVER use Spanish.
 
-MANDATORY FORMAT — start EVERY response with exactly these two lines:
+MANDATORY FORMAT — start EVERY response with exactly these two lines (FIRST, before anything else):
 COCTEL: [cocktail name in English]
-IMAGE: [visual description in English, 10-15 words — color, glass type, garnish, atmosphere]
+IMAGE: [visual description in English, 10-15 words — real color, exact glass type like "copper mug" or "martini glass", visible garnish, mood]
 
-Rules for IMAGE line: real drink color, exact glass (highball/martini/rocks/coupe), visible garnish, mood/lighting. English only, no quotes.
+Then write the complete recipe in Markdown IN ENGLISH.`
+    : `Eres un bartender experto y creativo. DEBES RESPONDER SIEMPRE EN ESPAÑOL. NUNCA uses inglés en la receta.
 
-Then write the complete recipe in Markdown IN ENGLISH. Ingredients, steps, serving — everything in English.`
-  : `Eres un bartender experto y creativo. DEBES RESPONDER ÚnicAMENTE EN ESPAÑOL. NUNCA escribas en inglés ni en ningún otro idioma, ni siquiera parcialmente. Cada palabra visible al usuario debe estar en español.
-
-FORMATO OBLIGATORIO — comienza SIEMPRE tu respuesta con exactamente estas dos líneas:
+FORMATO OBLIGATORIO — comienza SIEMPRE con exactamente estas dos líneas (LO PRIMERO DE TODO, antes que nada):
 COCTEL: [nombre del cóctel]
-IMAGE: [descripción visual en inglés, 10-15 palabras — color, tipo de vaso, guarnición, ambiente]
+IMAGE: [descripción visual en inglés, 10-15 palabras — color real, tipo de vaso exacto como "copper mug" o "martini glass", guarnición visible, iluminación]
 
-Reglas para la línea IMAGE: color real de la bebida, vaso exacto (highball/martini/rocks/coupe), guarnición visible, iluminación. Solo inglés, sin comillas.
-
-Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medidas, pasos de preparación, presentación — TODO en español. Nunca uses términos en inglés en la receta.`;
-
-  // Forzar idioma: prefijo en el mensaje del usuario + primer turno de asistente condicionado
-  const userContent = isEnglish
-    ? `[RESPOND ENTIRELY IN ENGLISH] ${prompt}`
-    : `[RESPONDE ÚnicaMENTE EN ESPAÑOL] ${prompt}`;
-
-  // Primer turno falso del asistente — solo el ancla de formato, sin texto visible
-  // Usar solo "COCTEL:" garantiza que el modelo continúa en el idioma correcto
-  // y no añade texto previo que aparecería en el panel principal
-  const assistantPrimer = 'COCTEL:';
+Luego escribe la receta completa en Markdown EN ESPAÑOL.`;
 
   const openrouter = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
@@ -178,67 +184,45 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
     },
   });
 
-  // ── Stream principal ─────────────────────────────────────────────────────
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // ── FASE 1: recopilar respuesta completa del modelo ──────────────
         const completion = await openrouter.chat.completions.create({
           model: 'openrouter/free',
           messages: [
-            { role: 'system',    content: systemPrompt },
-            { role: 'user',      content: userContent },
-            { role: 'assistant', content: assistantPrimer },
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: isEnglish
+                ? `${prompt}\n\n[Respond ENTIRELY in English. Start with COCTEL: and IMAGE: lines first.]`
+                : `${prompt}\n\n[Responde COMPLETAMENTE en español. Empieza con las líneas COCTEL: e IMAGE: primero.]`,
+            },
           ],
           temperature: 0.8,
           stream: true,
         });
 
-        let rawBuffer   = assistantPrimer;
-        let fullRecipe  = '';
-        let headersDone = false;
-        let cocktailName: string | null = null;
-        let imageKeywords: string | null = null;
-
+        let rawText = '';
         for await (const chunk of completion) {
-          const token = chunk.choices[0]?.delta?.content || '';
-          if (!token) continue;
-
-          if (!headersDone) {
-            rawBuffer += token;
-            // Buscamos el doble salto de línea que marca el fin del bloque de cabeceras
-            if (rawBuffer.includes('\n\n')) {
-              headersDone = true;
-              cocktailName  = extractCocktailName(rawBuffer);
-              imageKeywords = extractImageLine(rawBuffer);
-
-              // Extraemos solo lo que está DESPUÉS del bloque de cabeceras
-              const parts = rawBuffer.split('\n\n');
-              const recipeStart = parts.slice(1).join('\n\n');
-
-              if (recipeStart) {
-                fullRecipe += recipeStart;
-                emit(controller, { type: 'token', text: recipeStart });
-              }
-            }
-          } else {
-            fullRecipe += token;
-            emit(controller, { type: 'token', text: token });
-          }
+          rawText += chunk.choices[0]?.delta?.content || '';
         }
 
-        // Si el modelo no incluyó el nombre en la receta, lo añadimos
-        const hasTitle = cocktailName ? fullRecipe.toLowerCase().includes(cocktailName.toLowerCase()) : false;
-        
-        if (cocktailName && !hasTitle) {
-          const header = `### 🍹 ${cocktailName}\n\n`;
-          fullRecipe = header + fullRecipe;
-          // Notificar al cliente que hay un prefijo (lo insertamos al inicio)
-          emit(controller, { type: 'prefix', text: header });
+        // ── FASE 2: parsear y limpiar ────────────────────────────────────
+        const cocktailName  = extractCocktailName(rawText);
+        const imageKeywords = extractImageLine(rawText);
+        let   cleanRecipe   = cleanRecipeText(rawText);
+
+        // Añadir el nombre como header si no aparece en la receta limpia
+        const nameInRecipe = cocktailName &&
+          cleanRecipe.toLowerCase().includes(cocktailName.toLowerCase().substring(0, 6));
+        if (cocktailName && !nameInRecipe) {
+          cleanRecipe = `### 🍹 ${cocktailName}\n\n${cleanRecipe}`;
         }
 
-        const imagePrompt = buildFinalImagePrompt(imageKeywords, fullRecipe, cocktailName);
+        const imagePrompt = buildFinalImagePrompt(imageKeywords, cleanRecipe, cocktailName);
 
-        // ── Guardar en Supabase ─────────────────────────────────────────────
+        // ── FASE 3: guardar en Supabase ──────────────────────────────────
         let cocktailId: string | null = null;
         let jobId: string | null = null;
 
@@ -250,23 +234,46 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
           if (existing) {
             cocktailId = existing.id;
           } else {
-            const { data: newCocktail } = await supabase
+            const { data: newC } = await supabase
               .from('cocktails_invented')
-              .insert({ name: cocktailName, recipe: fullRecipe, image_path: null, user_id: user.id, rating: 0, tags: generateTags(cocktailName, fullRecipe, moodId) })
+              .insert({
+                name: cocktailName, recipe: cleanRecipe, image_path: null,
+                user_id: user.id, rating: 0,
+                tags: generateTags(cocktailName, cleanRecipe, moodId),
+              })
               .select().single();
-            if (newCocktail) {
-              cocktailId = newCocktail.id;
+            if (newC) {
+              cocktailId = newC.id;
               const { data: newJob } = await supabase
                 .from('cocktail_jobs')
-                .insert({ user_id: user.id, name: cocktailName, recipe: fullRecipe, image_prompt: imagePrompt, status: 'pending', image_path: null, error: null })
+                .insert({
+                  user_id: user.id, name: cocktailName, recipe: cleanRecipe,
+                  image_prompt: imagePrompt, status: 'pending',
+                  image_path: null, error: null,
+                })
                 .select().single();
               if (newJob) jobId = newJob.id;
             }
           }
         }
 
+        // ── FASE 4: hacer streaming del texto limpio ─────────────────────
+        // Dividir en palabras para el efecto de aparición progresiva
+        const words = cleanRecipe.split(/(\s+)/);
+        const BATCH = 4; // palabras por emit
+        for (let i = 0; i < words.length; i += BATCH) {
+          const chunk = words.slice(i, i + BATCH).join('');
+          if (chunk) emit(controller, { type: 'token', text: chunk });
+        }
+
         // Evento final con metadata
-        emit(controller, { type: 'done', cocktailId, jobId, cocktailName, imagePrompt });
+        emit(controller, {
+          type: 'done',
+          cocktailId,
+          jobId,
+          cocktailName,
+          imagePrompt,
+        });
 
       } catch (err: any) {
         console.error('[chat/stream]', err.message);
@@ -282,7 +289,7 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL. Ingredientes con medid
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no', // desactiva buffering en Nginx/Vercel
+      'X-Accel-Buffering': 'no',
     },
   });
 }
