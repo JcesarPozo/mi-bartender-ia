@@ -105,7 +105,7 @@ export default function Home() {
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      if (event === 'SIGNED_OUT') {
         setUser(null);
         setResponse(''); setCocktailImage(null); setActiveCocktailId(null);
         setPrompt(''); setSelectedMood(null); imageCache.current.clear();
