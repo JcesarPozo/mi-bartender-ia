@@ -22,14 +22,40 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const locale = searchParams.get('locale') || 'es';
-  const dateKey = searchParams.get('date') || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const locale   = searchParams.get('locale') || 'es';
+  const dateKey  = searchParams.get('date') || new Date().toISOString().split('T')[0];
+  const fullMode = searchParams.get('full') === 'true'; // solicitar receta completa
 
   const isEnglish = locale === 'en';
-
-  // Seed determinista por fecha
   const day = parseInt(dateKey.split('-')[2] || '1', 10) - 1;
   const seedCocktail = DAILY_SEEDS[day % DAILY_SEEDS.length];
+
+  // Modo receta completa: devolver preparación detallada
+  if (fullMode) {
+    const openrouter = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: process.env.OPENROUTER_API_KEY,
+      defaultHeaders: { 'HTTP-Referer': 'https://mi-bartender-ia.vercel.app', 'X-Title': 'Mi Bartender IA' },
+    });
+    try {
+      const completion = await openrouter.chat.completions.create({
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [
+          { role: 'system', content: isEnglish ? 'You are a cocktail expert. Respond in English.' : 'Eres un experto en coctelería. Responde en español.' },
+          { role: 'user', content: isEnglish
+            ? `Give me the full recipe for "${seedCocktail}" in Markdown format. Include: title, ingredients with exact measures, step-by-step preparation, and serving tip.`
+            : `Dame la receta completa de "${seedCocktail}" en formato Markdown. Incluye: título, ingredientes con medidas exactas, preparación paso a paso y consejo de servicio.`
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 700,
+      });
+      const fullRecipe = completion.choices[0]?.message?.content || '';
+      return NextResponse.json({ fullRecipe });
+    } catch {
+      return NextResponse.json({ fullRecipe: '' });
+    }
+  }
 
   const openrouter = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
@@ -63,7 +89,7 @@ Responde ÚNICAMENTE en este formato JSON exacto, nada más:
 
   try {
     const completion = await openrouter.chat.completions.create({
-      model: 'openrouter/free',
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
       messages: [
         { role: 'system', content: isEnglish ? 'You are a cocktail expert. Respond ONLY with valid JSON.' : 'Eres un experto en coctelería. Responde ÚNICAMENTE con JSON válido.' },
         { role: 'user', content: prompt },

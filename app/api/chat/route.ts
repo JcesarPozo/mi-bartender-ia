@@ -186,31 +186,73 @@ Luego escribe la receta completa en Markdown EN ESPAÑOL.`;
     timeout: 30000,
   });
 
+  // Modelos gratuitos en orden de velocidad (MoE primero = más rápidos)
+  // Si uno da 429/404, se prueba el siguiente automáticamente
+  const FREE_MODELS = [
+    'tencent/hy3-preview:free',              // MoE 12B activos — muy rápido
+    'nvidia/nemotron-3-super-120b-a12b:free',// MoE 12B activos — 50% más rápido que media
+    'meta-llama/llama-3.3-70b-instruct:free',// sólido, buen español
+    'openai/gpt-oss-120b:free',              // MoE OpenAI OSS
+    'openrouter/owl-alpha',                  // siempre disponible, sin :free
+    'openrouter/free',                       // fallback final: elige el que esté libre
+  ];
+
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    {
+      role: 'user' as const,
+      content: isEnglish
+        ? `${prompt}\n\n[Respond ENTIRELY in English. Start with COCTEL: and IMAGE: lines first.]`
+        : `${prompt}\n\n[Responde COMPLETAMENTE en español. Empieza con las líneas COCTEL: e IMAGE: primero.]`,
+    },
+  ];
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // ── FASE 1: recopilar respuesta completa del modelo ──────────────
-        const completion = await openrouter.chat.completions.create({
-          model: 'openrouter/free',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: isEnglish
-                ? `${prompt}\n\n[Respond ENTIRELY in English. Start with COCTEL: and IMAGE: lines first.]`
-                : `${prompt}\n\n[Responde COMPLETAMENTE en español. Empieza con las líneas COCTEL: e IMAGE: primero.]`,
-            },
-          ],
-          temperature: 0.8,
-          stream: true,
-        });
-
+        // ── FASE 1: intentar modelos en orden hasta que uno responda ────
         let rawText = '';
-        for await (const chunk of completion) {
-          rawText += chunk.choices[0]?.delta?.content || '';
+        let usedModel = '';
+        let lastError: any;
+
+        for (const model of FREE_MODELS) {
+          try {
+            console.log(`[chat] Intentando modelo: ${model}`);
+            const completion = await openrouter.chat.completions.create({
+              model,
+              messages,
+              temperature: 0.8,
+              stream: true,
+            });
+            for await (const chunk of completion) {
+              rawText += chunk.choices[0]?.delta?.content || '';
+            }
+            usedModel = model;
+            break; // éxito — salir del bucle
+          } catch (err: any) {
+            lastError = err;
+            const is429or404 = err.status === 429
+              || err.status === 404
+              || err.message?.includes('429')
+              || err.message?.includes('404')
+              || err.message?.toLowerCase().includes('rate limit')
+              || err.message?.toLowerCase().includes('no endpoints found')
+              || err.message?.toLowerCase().includes('provider returned error');
+            if (is429or404) {
+              console.warn(`[chat] ${model} → ${err.status || 'error'}, probando siguiente...`);
+              rawText = '';
+              continue;
+            }
+            throw err; // error distinto a 429, relanzar
+          }
         }
 
-        // ── FASE 2: parsear y limpiar ────────────────────────────────────
+        if (!rawText) {
+          throw lastError || new Error('Todos los modelos están saturados. Intenta en unos segundos.');
+        }
+
+        console.log(`[chat] Respuesta obtenida con: ${usedModel}`);
+
         const cocktailName  = extractCocktailName(rawText);
         const imageKeywords = extractImageLine(rawText);
         let   cleanRecipe   = cleanRecipeText(rawText);
