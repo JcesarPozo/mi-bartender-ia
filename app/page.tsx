@@ -14,7 +14,7 @@ import ShareCardModal from './components/ShareCardModal';
 import DailyDrink from './components/DailyDrink';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
-import { getTagById } from '@/lib/autoTags';
+import { getTagById, generateTags } from '@/lib/autoTags';
 import type { Plan } from '@/lib/plans';
 import { getRetryMessage, isResponseBad } from '@/lib/retryMessages';
 
@@ -231,7 +231,27 @@ export default function Home() {
     if (!user) return;
     const { data } = await supabase.from('cocktails_invented').select('*')
       .eq('user_id', user.id).order('created_at', { ascending: false });
-    if (data) setCocktailsList(data as Cocktail[]);
+    if (!data) return;
+
+    // Generar tags en memoria para cócteles que no los tienen
+    const cocktails = data.map(c => ({
+      ...c,
+      tags: (c.tags && c.tags.length > 0)
+        ? c.tags
+        : generateTags(c.name, c.recipe, null),
+    })) as Cocktail[];
+
+    setCocktailsList(cocktails);
+
+    // Guardar tags generados en Supabase en background (sin bloquear la UI)
+    const sinTags = data.filter(c => !c.tags || c.tags.length === 0);
+    for (const c of sinTags) {
+      const tags = generateTags(c.name, c.recipe, null);
+      supabase.from('cocktails_invented')
+        .update({ tags })
+        .eq('id', c.id)
+        .then(() => {});
+    }
   };
 
   const handleRate = async (cocktailId: string, stars: number) => {
