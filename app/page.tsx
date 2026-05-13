@@ -12,6 +12,7 @@ import StarRating from './components/StarRating';
 import TagFilter from './components/TagFilter';
 import ShareCardModal from './components/ShareCardModal';
 import DailyDrink from './components/DailyDrink';
+import RecipeReader from './components/RecipeReader';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
 import { getTagById, generateTags } from '@/lib/autoTags';
@@ -619,6 +620,7 @@ export default function Home() {
                   <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-8 p-5 rounded-xl ${tc.recipeBox}`}>
                     <h2 className={`text-xl font-bold mb-2 ${tc.textRecommTitle}`}>{app.recommendation}</h2>
                     <div className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-stone'} ${tc.textRecipe}`}><ReactMarkdown>{response}</ReactMarkdown></div>
+                    <RecipeReader text={response} />
                   </motion.div>
                 )}
               </AnimatePresence>
