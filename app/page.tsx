@@ -12,6 +12,7 @@ import StarRating from './components/StarRating';
 import TagFilter from './components/TagFilter';
 import ShareCardModal from './components/ShareCardModal';
 import DailyDrink from './components/DailyDrink';
+import DonationButton from './components/DonationButton';
 import RecipeReader from './components/RecipeReader';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
@@ -621,6 +622,10 @@ export default function Home() {
                     <h2 className={`text-xl font-bold mb-2 ${tc.textRecommTitle}`}>{app.recommendation}</h2>
                     <div className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-stone'} ${tc.textRecipe}`}><ReactMarkdown>{response}</ReactMarkdown></div>
                     <RecipeReader text={response} />
+                    {/* Donación inline: aparece solo si ya tiene 3+ cócteles guardados */}
+                    {cocktailsList.length >= 3 && (
+                      <DonationButton locale={locale} variant="inline" dark={isDark} />
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -779,6 +784,7 @@ export default function Home() {
             <img src="/logo-borrachos.jpg" alt="Borrach@s y más" className="w-full h-full object-contain" />
           </div>
           <p className={`text-xs italic text-center max-w-xs leading-relaxed ${isDark ? 'text-[#f5c842]/50' : 'text-[#2a1f00]'}`}>&ldquo;Beber es una necesidad, pero saber beber es un Arte.&rdquo;</p>
+          <DonationButton locale={locale} variant="compact" dark={isDark} />
           <p className={`text-xs mt-1 ${isDark ? 'text-[#f5c842]/25' : 'text-[#3a2a00]'}`}>&copy; 2026 Borrach@s y más. Todos los derechos reservados.</p>
         </div>
       </motion.footer>
