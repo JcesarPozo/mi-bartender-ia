@@ -143,7 +143,7 @@ export default function RecipeReader({ text }: RecipeReaderProps) {
   const speedLabels: Record<number, string> = { 0.75: '0.75×', 1: '1×', 1.25: '1.25×', 1.5: '1.5×' };
 
   return (
-    <div className={`mt-4 rounded-xl border overflow-hidden ${goldBg}`}>
+    <div className={`mt-4 rounded-xl border ${goldBg}`}>
 
       {/* Barra de controles */}
       <div className="flex items-center gap-2 px-4 py-2.5">
@@ -163,10 +163,11 @@ export default function RecipeReader({ text }: RecipeReaderProps) {
           <AnimatePresence>
             {showSpeed && (
               <motion.div
-                initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                initial={{ opacity: 0, y: 4, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                className={`absolute right-0 top-8 z-10 rounded-xl border shadow-lg overflow-hidden ${isDark ? 'bg-[#000c1f] border-[#f5c842]/20' : 'bg-white border-[#8B6914]/15'}`}
+                exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                className={`absolute right-0 bottom-9 z-50 rounded-xl border shadow-xl overflow-hidden min-w-[130px]
+                  ${isDark ? 'bg-[#000c1f] border-[#f5c842]/25' : 'bg-white border-[#8B6914]/20 shadow-[#8B6914]/10'}`}
               >
                 {speeds.map(s => (
                   <button
