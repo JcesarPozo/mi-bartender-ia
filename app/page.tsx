@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
@@ -13,6 +14,7 @@ import TagFilter from './components/TagFilter';
 import ShareCardModal from './components/ShareCardModal';
 import DailyDrink from './components/DailyDrink';
 import DonationButton from './components/DonationButton';
+import SubstituteBar from './components/SubstituteBar';
 import RecipeReader from './components/RecipeReader';
 import { useApp } from './context/AppContext';
 import { buildImagePrompt } from '@/lib/buildImagePrompt';
@@ -620,9 +622,16 @@ export default function Home() {
                 {response && !loading && (
                   <motion.div variants={fadeUp} initial="hidden" animate="visible" exit="exit" className={`mt-8 p-5 rounded-xl ${tc.recipeBox}`}>
                     <h2 className={`text-xl font-bold mb-2 ${tc.textRecommTitle}`}>{app.recommendation}</h2>
-                    <div className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-stone'} ${tc.textRecipe}`}><ReactMarkdown>{response}</ReactMarkdown></div>
+                    <div className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-stone'} ${tc.textRecipe}`}><ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown></div>
                     <RecipeReader text={response} />
-                    {/* Donación inline: aparece solo si ya tiene 3+ cócteles guardados */}
+
+                    {/* ── ¿Falta algún ingrediente? Sustitutos instantáneos ── */}
+                    <SubstituteBar
+                      recipe={response}
+                      cocktailName={lastCocktailNameRef.current || 'cóctel'}
+                    />
+
+                    {/* Donación inline */}
                     {cocktailsList.length >= 3 && (
                       <DonationButton locale={locale} variant="inline" dark={isDark} />
                     )}
