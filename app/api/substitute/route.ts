@@ -32,22 +32,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Ingrediente requerido' }, { status: 400 });
   }
 
-  const isEs       = locale !== 'en';
+  const isEs = locale === 'es'; // Asegurar comparación estricta
   const ingredientList = items.map(i => `"${i}"`).join(', ');
 
   const systemPrompt = isEs
-    ? `Eres un bartender práctico. Responde SOLO EN ESPAÑOL. Prohibido el inglés.`
-    : `You are a practical bartender. Respond ONLY IN ENGLISH. Spanish is forbidden.`;
+    ? `Eres un experto bartender. Tu respuesta debe estar SIEMPRE en español.
+Sigue ESTRICTAMENTE este formato, sin añadir introducciones ni explicaciones:
+• Sin [ingrediente]: [opción 1] o [opción 2]`
+    : `You are an expert bartender. Your response must be ALWAYS in English.
+Follow STRICTLY this format, without adding introductions or explanations:
+• No [ingredient]: [option 1] or [option 2]`;
 
   const userPrompt = isEs
-    ? `Cóctel: "${cocktailName}". Me faltan: ${ingredientList}.
-Dame sustitutos prácticos que pueda tener en casa. Formato:
-• Sin [ingrediente]: [opción 1] o [opción 2]
-Solo la lista. Sin introducción. En español.`
-    : `Cocktail: "${cocktailName}". I'm missing: ${ingredientList}.
-Give me practical substitutes I can have at home. Format:
-• No [ingredient]: [option 1] or [option 2]
-List only. No intro. In English.`;
+    ? `Cóctel: "${cocktailName}". Ingredientes faltantes: ${ingredientList}.
+Responde SOLO con la lista en el formato indicado.`
+    : `Cocktail: "${cocktailName}". Missing ingredients: ${ingredientList}.
+Respond ONLY with the list in the indicated format.`;
 
   const openrouter = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
@@ -73,8 +73,16 @@ List only. No intro. In English.`;
         max_tokens: 200,
       });
 
-      const answer = completion.choices[0]?.message?.content?.trim() || '';
-      if (answer.length < 5) continue; // respuesta vacía → probar siguiente
+      const rawAnswer = completion.choices[0]?.message?.content?.trim() || '';
+      
+      // Post-procesado: filtrar solo líneas que empiezan con el símbolo de viñeta
+      const answer = rawAnswer
+        .split('\n')
+        .map(l => l.trim())
+        .filter(line => line.startsWith('•'))
+        .join('\n');
+
+      if (answer.length < 5) continue; // respuesta vacía o sin formato → probar siguiente
 
       console.log(`[substitute] ✅ modelo: ${model}`);
       return NextResponse.json({ answer, ingredients: items });
